@@ -1,0 +1,27 @@
+    Virtual Machine using Breakpoint Tracing
+    Copyright (C) 2012 Bi Wu
+
+Instructions:
+To compile,
+
+	make ARCH=x86
+
+	gcc -lncurses ncurse.c -o vm-term
+
+To run,
+
+	insmod btc.ko
+	cat your_image_file > /proc/btc
+        mknod /dev/btc0 c your_device_number 0
+	./vm-term /dev/btc0 0 16384
+
+vm-term is the ncurse client to observe virtual machine output.
+when vm-term is running:
+F5 pause VM and bring up menu, in menu:
+  press R to resume/pause VM execution  (always do this first. VM is by default paused)
+  press B to place debug breakpoints
+  press S to single step (not guaranteed to work)
+HOME key scrolls up
+END key scrolls down
+other keys will be sent to VM, currently only accept a-z, 1-0, enter, space, backspace
+

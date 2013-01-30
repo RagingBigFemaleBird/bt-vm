@@ -1,0 +1,10 @@
+*~
+*.[oa]
+*.mod.c
+*.cmd
+*.ko
+*.order
+Module.*
+guest
+host
+.*
