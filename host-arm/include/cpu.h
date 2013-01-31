@@ -56,6 +56,7 @@ struct h_cpu {
     unsigned int p14_dtrrx;
     unsigned int p14_dtrtx;
     unsigned int p15_vector;
+    unsigned int p15_asid;
 
     unsigned int r0;
     unsigned int r1;

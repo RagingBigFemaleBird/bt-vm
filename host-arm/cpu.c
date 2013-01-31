@@ -156,19 +156,17 @@ h_cpu_save(struct v_world *w)
     asm volatile ("mrc p15 ,0 ,%0, c2, c0, 0":"=r" (hostcpu.p15_trbase));
     asm volatile ("mrc p15 ,0 ,%0, c2, c0, 0":"=r" (h->hcpu.p15_trbase));
     V_LOG("saved trbase: %x\n", h->hcpu.p15_trbase);
+    asm volatile ("mrc p15, 0, %0, c13, c0, 1":"=r" (h->hcpu.p15_asid));
 }
 
 static void inline
-h_cpu_switch_mm(unsigned int tr)
+h_cpu_switch_mm(unsigned int tr, unsigned int asid)
 {
-    unsigned int c_id;
-    asm volatile ("mrc p15, 0, %0, c13, c0, 1":"=r" (c_id));
-    asm volatile ("isb");
     asm volatile ("mcr p15, 0, %0, c13, c0, 1"::"r" (0));
     asm volatile ("isb");
     asm volatile ("mcr p15, 0, %0, c2, c0, 0"::"r" (tr));
     asm volatile ("isb");
-    asm volatile ("mcr p15, 0, %0, c13, c0, 1"::"r" (c_id));
+    asm volatile ("mcr p15, 0, %0, c13, c0, 1"::"r" (asid));
     asm volatile ("isb");
 }
 
@@ -210,7 +208,6 @@ h_switch_to##function_no(unsigned long trbase, struct v_world *w) \
     unsigned int ifar, ifsr, dfar, dfsr; \
     h->hcpu.p15_trattr = hostcpu.p15_trattr; \
     local_irq_save(i); \
-    h_flush_cache_all(); \
     asm volatile ("mcr p15, 0, %0, c1, c0, 0"::"r" (hostcpu.p15_ctrl & \
             (~P15_CTRL_V))); \
     asm volatile ("mcr p15, 0, %0, c12, c0, 0"::"r" (h_vector_entry##function_no)); \
@@ -226,7 +223,7 @@ h_switch_to##function_no(unsigned long trbase, struct v_world *w) \
     asm volatile ("mcr p14 ,0 ,%0, c0, c4, 4"::"r" (w->hregs.gcpu.bvr[4])); \
     asm volatile ("mcr p14 ,0 ,%0, c0, c5, 5"::"r" (w->hregs.gcpu.bcr[5])); \
     asm volatile ("mcr p14 ,0 ,%0, c0, c5, 4"::"r" (w->hregs.gcpu.bvr[5])); \
-    h_cpu_switch_mm(tr); \
+    h_cpu_switch_mm(tr, 0xb1); \
     h_flush_tlb_all(); \
  \
     asm volatile ( \
@@ -328,81 +325,12 @@ h_switch_to##function_no(unsigned long trbase, struct v_world *w) \
         "sub r12, r12, #8\n\t" \
         "ldmia r12, {r13-r14}^\n\t" \
         "sub r12, r12, #60\n\t"::"r" (&(h->hcpu.r0)), "r"(&(h->gcpu.r0)):"r12"); \
- \
- \
-    asm volatile \
-        ("	dmb					@ ensure ordering with previous memory accesses"); \
-    asm volatile ("	mrc	p15, 1, r0, c0, c0, 1		@ read clidr"); \
-    asm volatile \
-        ("	ands	r3, r0, #0x7000000		@ extract loc from clidr"); \
-    asm volatile \
-        ("	mov	r3, r3, lsr #23			@ left align loc bit field"); \
-    asm volatile \
-        ("	beq	finished"#function_no"			@ if loc is 0, then no need to clean"); \
-    asm volatile \
-        ("	mov	r10, #0				@ start clean at cache level 0"); \
-    asm volatile (" loop1"#function_no":"); \
-    asm volatile \
-        ("	add	r2, r10, r10, lsr #1		@ work out 3x current cache level"); \
-    asm volatile \
-        ("	mov	r1, r0, lsr r2			@ extract cache type bits from clidr"); \
-    asm volatile \
-        ("	and	r1, r1, #7			@ mask of the bits for current cache only"); \
-    asm volatile \
-        ("	cmp	r1, #2				@ see what cache we have at this level"); \
-    asm volatile \
-        ("	blt	skip"#function_no"				@ skip if no cache, or just i-cache"); \
-    asm volatile \
-        ("	mcr	p15, 2, r10, c0, c0, 0		@ select current cache level in cssr"); \
-    asm volatile \
-        ("	isb					@ isb to sych the new cssr&csidr"); \
-    asm volatile \
-      ("	mrc	p15, 1, r1, c0, c0, 0		@ read the new csidr"); \
-    asm volatile \
-        ("	and	r2, r1, #7			@ extract the length of the cache lines"); \
-    asm volatile \
-        ("	add	r2, r2, #4			@ add 4 (line length offset)"); \
-    asm volatile ("	ldr	r4, =0x3ff"); \
-    asm volatile \
-        ("	ands	r4, r4, r1, lsr #3		@ find maximum number on the way size"); \
-    asm volatile \
-        ("	clz	r5, r4				@ find bit position of way size increment"); \
-    asm volatile ("	ldr	r7, =0x7fff"); \
-    asm volatile \
-        ("	ands	r7, r7, r1, lsr #13		@ extract max number of the index size"); \
-    asm volatile ("loop2"#function_no":"); \
-    asm volatile \
-        ("	mov	r9, r4				@ create working copy of max way size"); \
-    asm volatile ("loop3"#function_no":"); \
-    asm volatile \
-        ("	orr	r11, r10, r9, lsl r5		@ factor way and cache number into r11"); \
-    asm volatile \
-        ("	orr	r11, r11, r7, lsl r2		@ factor index number into r11"); \
-    asm volatile \
-        ("	mcr	p15, 0, r11, c7, c14, 2		@ clean & invalidate by set/way"); \
-    asm volatile \
-      ("	subs	r9, r9, #1			@ decrement the way"); \
-    asm volatile ("	bge	loop3"#function_no); \
-    asm volatile \
-      ("	subs	r7, r7, #1			@ decrement the index"); \
-    asm volatile ("	bge	loop2"#function_no); \
-    asm volatile ("skip"#function_no":"); \
-    asm volatile \
-        ("	add	r10, r10, #2			@ increment cache number"); \
-    asm volatile ("	cmp	r3, r10"); \
-    asm volatile ("	bgt	loop1"#function_no); \
-    asm volatile ("finished"#function_no":"); \
-    asm volatile \
-        ("	mov	r10, #0				@ swith back to cache level 0"); \
-    asm volatile \
-        ("	mcr	p15, 2, r10, c0, c0, 0		@ select current cache level in cssr"); \
-    asm volatile ("	dsb"); \
-    asm volatile ("	isb"); \
+\
     /* must maintain r12 until this instruction*/ \
     asm volatile ("ldmia r12, {r0-r14}"); \
  \
 /*    asm volatile ("h_vector_return:");*/ \
-    h_cpu_switch_mm(h->hcpu.p15_trbase); \
+    h_cpu_switch_mm(h->hcpu.p15_trbase, h->hcpu.p15_asid); \
     h_flush_tlb_all(); \
      /*IFAR*/ asm volatile ("mrc p15, 0, %0, c6, c0, 2":"=r" (ifar)); \
      /*IFSR*/ asm volatile ("mrc p15, 0, %0, c5, c0, 1":"=r" (ifsr)); \
@@ -717,6 +645,7 @@ h_inject_int(struct v_world *world, unsigned int voff)
     world->gregs.cpsr |= newmode;
     world->gregs.cpsr |= H_CPSR_I;
     V_VERBOSE("new cpsr %x", world->gregs.cpsr);
+    flush_cache_all();
 }
 
 
@@ -1245,4 +1174,5 @@ h_do_fail_inst(struct v_world *world, unsigned long ip)
     }
   processed:
     world->hregs.gcpu.pc += 4;
+    flush_cache_all();
 }
