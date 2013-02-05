@@ -28,4 +28,18 @@ void h_step_on(struct v_world *);
 void h_step_off(struct v_world *);
 void h_bt_reset(struct v_world *world);
 
+struct h_bt_cache {
+    unsigned long addr;
+    unsigned int dr7;
+    unsigned int dr0;
+    unsigned int dr1;
+    unsigned int dr2;
+    unsigned int dr3;
+    struct v_poi *poi;
+};
+
+struct v_poi_cached_tree_plan;
+void h_bt_cache(struct v_world *, struct v_poi_cached_tree_plan *, int);
+void h_bt_cache_restore(struct v_world *);
+
 #endif

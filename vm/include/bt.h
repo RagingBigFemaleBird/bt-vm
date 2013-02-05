@@ -32,21 +32,29 @@
 
 struct v_poi_tree;
 
-struct v_tree_plan {
+struct v_poi_tree_plan {
     unsigned char valid;
     unsigned char count;
     struct v_poi *poi[8];       /*todo: this constant */
+};
+#define BT_CACHE
+#define BT_CACHE_LEVEL 16
+#define BT_CACHE_CAPACITY 16
+
+struct v_poi_cached_tree_plan {
+    unsigned long addr;
+    struct v_poi *poi;
+    struct v_poi_tree_plan *plan;
 };
 
 struct v_poi {
     unsigned int type;
     unsigned int ex_mode;
     unsigned long addr;
-    unsigned int bp_number;
     int invalid;
     unsigned int ref_count;
     struct v_poi_tree *tree;
-    struct v_tree_plan plan;
+    struct v_poi_tree_plan plan;
     int tree_count;
     int expect;
     struct v_poi *next_poi;
@@ -57,6 +65,7 @@ struct v_poi {
 struct v_ipoi {
     unsigned long addr;
     unsigned int key;
+    int expect;
     struct v_poi *poi;
     int invalid;
     struct v_ipoi *next;
@@ -84,4 +93,7 @@ void v_add_ipoi(struct v_world *, unsigned intr, unsigned int, struct v_poi *);
 struct v_fc *v_find_fc(struct v_page *, unsigned int);
 struct v_fc *v_add_fc(struct v_page *, unsigned int, unsigned int);
 void v_bt_reset(struct v_world *);
+#ifdef BT_CACHE
+void v_bt_cache(struct v_world *world);
+#endif
 #endif

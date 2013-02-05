@@ -113,6 +113,9 @@ v_switch_to(struct v_world *world)
             if (world->poi == NULL) {
                 h_perf_tsc_begin(0);
                 v_bt(world);
+#ifdef BT_CACHE
+                v_bt_cache(world);
+#endif
                 h_perf_tsc_end(H_PERF_TSC_BT, 0);
             }
         } else {

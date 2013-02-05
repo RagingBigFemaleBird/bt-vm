@@ -43,6 +43,9 @@ v_find_ipoi(struct v_page *mpage, unsigned long addr, unsigned int key)
                 V_VERBOSE("wrong key");
             } else {
                 V_VERBOSE("found %lx key %x", i->addr, i->key);
+                if (i->poi != NULL)
+                    i->poi->expect = i->expect;
+                i->invalid = 1;
                 return i->poi;
             }
         }
@@ -111,7 +114,6 @@ v_set_bp(struct v_world *world, struct v_poi *poi, unsigned int bp_number)
     h_set_bp(world, poi->addr, bp_number);
     ASSERT(!(poi->type & V_INST_I));
     world->bp_to_poi[bp_number] = poi;
-    poi->bp_number = bp_number;
     V_LOG("Setting breakpoint %x at %lx type %x", bp_number, poi->addr,
         poi->type);
 }
@@ -145,8 +147,8 @@ v_add_ipoi(struct v_world *world, unsigned int addr, unsigned int key,
         return;
     }
     while (i != NULL) {
-        if (i->addr == addr && i->invalid == 0) {
-            V_VERBOSE("found %lx", i->addr);
+        if (i->addr == addr && i->invalid) {
+            V_VERBOSE("reuse %lx", i->addr);
             break;
         }
         i = i->next;
@@ -160,6 +162,8 @@ v_add_ipoi(struct v_world *world, unsigned int addr, unsigned int key,
     i->key = key;
     i->poi = p;
     i->invalid = 0;
+    if (p != NULL)
+        i->expect = p->expect;
 }
 
 /**
@@ -695,7 +699,7 @@ v_do_bp(struct v_world *world, unsigned long addr, unsigned int is_step)
             }
         }
         if (world->poi == NULL) {
-            V_ALERT
+            V_ERR
                 ("Current IP %lx is not any of the BPs. Lost control of VM.",
                 (unsigned long) ip);
             world->status = VM_PAUSED;
@@ -815,3 +819,70 @@ v_bt(struct v_world *world)
         v_set_bp(world, world->poi, 0);
     }
 }
+
+#ifdef BT_CACHE
+
+void
+_v_bt_cache(struct v_world *world, struct v_poi *poi, int depth,
+    struct v_poi_cached_tree_plan *cache, int *cache_count)
+{
+    int i, total;
+    struct v_poi *todo_poi[H_DEBUG_MAX_BP];
+    if (depth >= BT_CACHE_LEVEL)
+        return;
+    if (*cache_count >= BT_CACHE_CAPACITY)
+        return;
+    for (i = 0; i < *cache_count; i++) {
+        if (cache[i].addr == poi->addr)
+            return;
+    }
+    if (poi->tree == NULL) {
+        h_perf_tsc_begin(1);
+        v_poi_construct_tree(world, poi);
+        h_perf_tsc_end(H_PERF_TSC_TREE, 1);
+        V_VERBOSE("Tree construction done");
+    }
+    h_perf_tsc_begin(1);
+    v_poi_plan_bp(world, poi, H_DEBUG_MAX_BP);
+    h_perf_tsc_end(H_PERF_TSC_PLAN, 1);
+    total = world->current_valid_bps;
+    for (i = 0; i < total; i++) {
+        todo_poi[i] = world->bp_to_poi[i];
+    }
+    cache[*cache_count].addr = poi->addr;
+    cache[*cache_count].plan = &poi->plan;
+    cache[*cache_count].poi = poi;
+    *cache_count = (*cache_count) + 1;
+    for (i = 0; i < total; i++) {
+        if (todo_poi[i]->type & V_INST_CB) {
+            V_VERBOSE("Recursively do %lx", todo_poi[i]->addr);
+            _v_bt_cache(world, todo_poi[i], depth + 1, cache, cache_count);
+        }
+    }
+}
+
+void
+v_bt_cache(struct v_world *world)
+{
+    int i, total;
+    struct v_poi *save_poi[H_DEBUG_MAX_BP];
+    struct v_poi_cached_tree_plan cache[BT_CACHE_CAPACITY];
+    int cache_count = 0;
+    total = world->current_valid_bps;
+    for (i = 0; i < total; i++) {
+        save_poi[i] = world->bp_to_poi[i];
+    }
+    for (i = 0; i < total; i++) {
+        if (save_poi[i]->type & V_INST_CB) {
+            V_VERBOSE("(M)Recursively do %lx", save_poi[i]->addr);
+            _v_bt_cache(world, save_poi[i], 0, cache, &cache_count);
+        }
+    }
+    h_bt_reset(world);
+    for (i = 0; i < total; i++) {
+        v_set_bp(world, save_poi[i], i);
+    }
+    world->current_valid_bps = total;
+    h_bt_cache(world, cache, cache_count);
+}
+#endif

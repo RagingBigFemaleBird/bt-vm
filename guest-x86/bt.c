@@ -854,5 +854,5 @@ g_tr_next(struct v_world *world, unsigned int *type, unsigned long *b_target)
 unsigned int
 g_get_poi_key(struct v_world *w)
 {
-    return g_get_sp(w);
+    return w->gregs.cr3;
 }
