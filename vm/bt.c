@@ -253,6 +253,41 @@ v_translate(struct v_world *world, unsigned long ip)
 }
 
 /**
+ * @in ip virtual address
+ *
+ * start translation at ip, mark the first instruction as a cue if possible
+ */
+static struct v_poi *
+v_translate_cue(struct v_world *world, unsigned long ip)
+{
+    struct v_poi *poi = NULL;
+    struct v_poi *cue = NULL;
+    struct v_page *mpage;
+    V_VERBOSE("translation_cue starting %lx", ip);
+    poi = v_translate(world, ip);
+    /* it's already marked, the very first instruction is not INST_I.*/
+    if (poi->addr == ip) return;
+    mpage = h_p2mp(world, g_v2p(world, ip, 1));
+    if (mpage != NULL) {
+        cue = v_find_poi(mpage, ip);
+        if (cue != NULL)
+            return poi;
+        cue = v_add_poi(mpage, ip, V_INST_I, g_get_current_ex_mode(world));
+        cue->next_inst = poi;
+        if ((mpage->attr & V_PAGE_TYPE_MASK) == V_PAGE_EXD) {
+            mpage->attr &= (~V_PAGE_TYPE_MASK);
+            mpage->attr |= V_PAGE_STEP;
+            if (mpage->attr & V_PAGE_W) {
+                mpage->attr &= (~V_PAGE_W);
+            }
+            v_spt_inv_page(world, mpage);
+            h_new_trbase(world);
+            V_LOG("Write protecting %lx to %x", ip, mpage->attr);
+        }
+    }
+    return poi;
+}
+/**
  *
  * check for existing poi
  */
@@ -792,13 +827,16 @@ v_bt(struct v_world *world)
     if ((world->poi = v_find_poi(mpage, ip)) == NULL) {
         struct v_poi *poi;
         h_perf_tsc_begin(1);
-        poi = v_translate(world, ip);
+        poi = v_translate_cue(world, ip);
         h_perf_tsc_end(H_PERF_TSC_TRANSLATE, 1);
         world->poi = poi;
         if (world->poi == NULL) {
             world->status = VM_PAUSED;
             V_ERR("Internal error...");
         }
+    }
+    if (world->poi->type & V_INST_I) {
+        world->poi = world->poi->next_inst;
     }
     if (world->poi->type & V_INST_CB) {
         /* it's a conditional branch. do it directly. save one world switch */
