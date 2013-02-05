@@ -266,7 +266,7 @@ v_translate_cue(struct v_world *world, unsigned long ip)
     V_VERBOSE("translation_cue starting %lx", ip);
     poi = v_translate(world, ip);
     /* it's already marked, the very first instruction is not INST_I.*/
-    if (poi->addr == ip) return;
+    if (poi->addr == ip) return poi;
     mpage = h_p2mp(world, g_v2p(world, ip, 1));
     if (mpage != NULL) {
         cue = v_find_poi(mpage, ip);
