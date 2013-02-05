@@ -26,8 +26,12 @@
 #define V_PERF_PF 2
 /*privileged instructions*/
 #define V_PERF_PI 3
+/*BT privileged instructions*/
+#define V_PERF_BT_F 4
+/*BT pointer branches*/
+#define V_PERF_BT_P 5
 
-#define V_PERF_COUNT 4
+#define V_PERF_COUNT 6
 void v_perf_inc(int, long);
 void v_perf_init(void);
 long v_perf_get(int);

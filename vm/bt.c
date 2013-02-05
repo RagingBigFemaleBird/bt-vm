@@ -16,6 +16,7 @@
  *   along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 #include "vm/include/bt.h"
+#include "vm/include/perf.h"
 #include "guest/include/world.h"
 #include "guest/include/bt.h"
 #include "guest/include/cpu.h"
@@ -755,12 +756,14 @@ v_do_bp(struct v_world *world, unsigned long addr, unsigned int is_step)
     if ((world->poi->type & V_INST_F) && ip == world->poi->addr) {
         h_perf_tsc_begin(1);
         h_do_fail_inst(world, ip);
+	v_perf_inc(V_PERF_BT_F, 1);
         h_perf_tsc_end(H_PERF_TSC_MINUS_FI, 1);
         world->poi = NULL;
     } else if (((world->poi->type & V_INST_U)
             || (world->poi->type & V_INST_PB))
         && (ip == world->poi->addr)) {
         h_step_on(world);
+	v_perf_inc(V_PERF_BT_P, 1);
     } else {
         world->poi->expect = 0;
         if (world->poi->tree == NULL) {
