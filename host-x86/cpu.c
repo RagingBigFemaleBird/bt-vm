@@ -283,6 +283,9 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
     asm volatile ("jmp 8b"); \
     asm volatile ("30:"); \
     asm volatile ("mov %edx, %ss:4(%eax)"); \
+    asm volatile ("mov %ss:104(%esp), %eax"); /* 13 * 8 = eflags position */ \
+    asm volatile ("and $0xfffeffff, %eax"); /* no RF */ \
+    asm volatile ("mov %eax, %ss:104(%esp)"); \
     asm volatile ("mov %cs:4(%ebx), %eax"); \
     asm volatile ("mov %eax, %dr7"); \
     asm volatile ("mov %cs:8(%ebx), %eax"); \
