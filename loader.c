@@ -322,6 +322,9 @@ btc_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
             for (i = 0; i < G_PERF_COUNT; i++) {
                 V_ERR("Guest Perf Counter %x, %lx", i, g_perf_get(i));
             }
+#ifdef BT_CACHE
+            v_dump_pb_cache(w_list);
+#endif
         }
         ret = curr->status;
         break;

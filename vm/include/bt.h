@@ -40,11 +40,20 @@ struct v_poi_tree_plan {
 #define BT_CACHE
 #define BT_CACHE_LEVEL 16
 #define BT_CACHE_CAPACITY 16
+#define BT_CACHE_PB_COUNT 16
 
 struct v_poi_cached_tree_plan {
     unsigned long addr;
     struct v_poi *poi;
     struct v_poi_tree_plan *plan;
+};
+
+struct v_poi_pb_cache {
+    struct v_poi_pb_cache *next;
+    unsigned long addr;
+    unsigned total;
+    unsigned int dest[BT_CACHE_PB_COUNT];
+    unsigned int freq[BT_CACHE_PB_COUNT];
 };
 
 struct v_poi {
@@ -94,6 +103,7 @@ struct v_fc *v_find_fc(struct v_page *, unsigned int);
 struct v_fc *v_add_fc(struct v_page *, unsigned int, unsigned int);
 void v_bt_reset(struct v_world *);
 #ifdef BT_CACHE
-void v_bt_cache(struct v_world *world);
+void v_bt_cache(struct v_world *);
+void v_dump_pb_cache(struct v_world *);
 #endif
 #endif

@@ -87,7 +87,9 @@ v_create_world(unsigned long pages)
     g_world_init(world, pages);
     world->poi = NULL;
     world->spt_list = NULL;
-
+#ifdef BT_CACHE
+    world->pb_cache = NULL;
+#endif
     h_init_int();
 
     V_EVENT("World initialization complete<\n");

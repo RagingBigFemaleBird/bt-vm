@@ -266,8 +266,9 @@ v_translate_cue(struct v_world *world, unsigned long ip)
     struct v_page *mpage;
     V_VERBOSE("translation_cue starting %lx", ip);
     poi = v_translate(world, ip);
-    /* it's already marked, the very first instruction is not INST_I.*/
-    if (poi->addr == ip) return poi;
+    /* it's already marked, the very first instruction is not INST_I. */
+    if (poi->addr == ip)
+        return poi;
     mpage = h_p2mp(world, g_v2p(world, ip, 1));
     if (mpage != NULL) {
         cue = v_find_poi(mpage, ip);
@@ -288,6 +289,7 @@ v_translate_cue(struct v_world *world, unsigned long ip)
     }
     return poi;
 }
+
 /**
  *
  * check for existing poi
@@ -704,6 +706,74 @@ v_poi_plan_bp(struct v_world *world, struct v_poi *poi, int bp_count)
     poi->plan.valid = 1;
 }
 
+#ifdef BT_CACHE
+struct v_poi_pb_cache *
+v_find_pb_cache(struct v_world *world, unsigned long branch)
+{
+    struct v_poi_pb_cache *head = world->pb_cache;
+    while (head != NULL) {
+        if (head->addr == branch)
+            break;
+        head = head->next;
+    }
+    return head;
+}
+
+struct v_poi_pb_cache *
+v_create_pb_cache(struct v_world *world, unsigned long branch)
+{
+    struct v_poi_pb_cache *head = h_raw_malloc(sizeof(struct v_poi_pb_cache));
+    head->next = world->pb_cache;
+    head->addr = branch;
+    head->total = 0;
+    world->pb_cache = head;
+    return head;
+}
+
+void
+v_update_pb_cache(struct v_world *world, unsigned long branch,
+    unsigned long dest)
+{
+    struct v_poi_pb_cache *find = v_find_pb_cache(world, branch);
+    unsigned int i, lowest_idx = 0, lowest_freq = 0xffffffff;
+    if (find == NULL)
+        find = v_create_pb_cache(world, branch);
+    for (i = 0; i < find->total; i++) {
+        if (find->freq[i] < lowest_freq) {
+            lowest_idx = i;
+            lowest_freq = find->freq[i];
+        }
+        if (find->dest[i] == dest) {
+            find->freq[i]++;
+            return;
+        }
+    }
+    if (find->total < BT_CACHE_PB_COUNT) {
+        find->freq[find->total] = 1;
+        find->dest[find->total] = dest;
+        find->total++;
+        return;
+    }
+    find->freq[lowest_idx] = 1;
+    find->dest[lowest_idx] = dest;
+}
+
+void
+v_dump_pb_cache(struct v_world *world)
+{
+    int i;
+    struct v_poi_pb_cache *head = world->pb_cache;
+    while (head != NULL) {
+        V_ERR("Cache Entry for %lx---", head->addr);
+        for (i = 0; i < head->total; i++) {
+            V_ERR("---Dest %8x|Hits %8x---", head->dest[i], head->freq[i]);
+        }
+        head = head->next;
+    }
+
+}
+#endif
+
 /**
  * @in addr virtual address
  * @in is_step world is stepping
@@ -744,6 +814,9 @@ v_do_bp(struct v_world *world, unsigned long addr, unsigned int is_step)
     if (is_step) {
         h_step_off(world);
         if (!(ip == world->poi->addr)) {
+#ifdef BT_CACHE
+            v_update_pb_cache(world, world->poi->addr, ip);
+#endif
             world->poi = NULL;
         } else {
             V_VERBOSE("Step on: unnecessary function return breakpoints");
@@ -756,14 +829,14 @@ v_do_bp(struct v_world *world, unsigned long addr, unsigned int is_step)
     if ((world->poi->type & V_INST_F) && ip == world->poi->addr) {
         h_perf_tsc_begin(1);
         h_do_fail_inst(world, ip);
-	v_perf_inc(V_PERF_BT_F, 1);
+        v_perf_inc(V_PERF_BT_F, 1);
         h_perf_tsc_end(H_PERF_TSC_MINUS_FI, 1);
         world->poi = NULL;
     } else if (((world->poi->type & V_INST_U)
             || (world->poi->type & V_INST_PB))
         && (ip == world->poi->addr)) {
         h_step_on(world);
-	v_perf_inc(V_PERF_BT_P, 1);
+        v_perf_inc(V_PERF_BT_P, 1);
     } else {
         world->poi->expect = 0;
         if (world->poi->tree == NULL) {
@@ -868,6 +941,7 @@ _v_bt_cache(struct v_world *world, struct v_poi *poi, int depth,
     struct v_poi_cached_tree_plan *cache, int *cache_count)
 {
     int i, total;
+    unsigned int cache_addr;
     struct v_poi *todo_poi[H_DEBUG_MAX_BP];
     if (depth >= BT_CACHE_LEVEL)
         return;
@@ -877,6 +951,11 @@ _v_bt_cache(struct v_world *world, struct v_poi *poi, int depth,
         if (cache[i].addr == poi->addr)
             return;
     }
+    cache_addr = poi->addr;
+    while (poi->type & V_INST_I)
+        poi = poi->next_inst;
+    if (!(poi->type & V_INST_CB))
+        return;
     if (poi->tree == NULL) {
         h_perf_tsc_begin(1);
         v_poi_construct_tree(world, poi);
@@ -890,7 +969,7 @@ _v_bt_cache(struct v_world *world, struct v_poi *poi, int depth,
     for (i = 0; i < total; i++) {
         todo_poi[i] = world->bp_to_poi[i];
     }
-    cache[*cache_count].addr = poi->addr;
+    cache[*cache_count].addr = cache_addr;
     cache[*cache_count].plan = &poi->plan;
     cache[*cache_count].poi = poi;
     *cache_count = (*cache_count) + 1;
@@ -898,6 +977,30 @@ _v_bt_cache(struct v_world *world, struct v_poi *poi, int depth,
         if (todo_poi[i]->type & V_INST_CB) {
             V_VERBOSE("Recursively do %lx", todo_poi[i]->addr);
             _v_bt_cache(world, todo_poi[i], depth + 1, cache, cache_count);
+        }
+        if (todo_poi[i]->type & V_INST_PB) {
+            struct v_poi_pb_cache *find =
+                v_find_pb_cache(world, todo_poi[i]->addr);
+            int k;
+            if (find == NULL)
+                continue;
+            for (k = 0; k < find->total; k++) {
+                if (find->freq[k] >= 2) {
+                    unsigned long possible_ip = find->dest[k];
+                    unsigned long phys = g_v2p(world, possible_ip, 1);
+                    struct v_page *mpage = h_p2mp(world, phys);
+                    struct v_poi *possible_poi;
+                    if (mpage == NULL)
+                        continue;
+                    possible_poi = v_find_poi(mpage, possible_ip);
+                    if (possible_poi == NULL)
+                        continue;
+                    V_VERBOSE("Found poi %lx for %lx", possible_poi->addr,
+                        todo_poi[i]->addr);
+                    _v_bt_cache(world, possible_poi, depth + 1, cache,
+                        cache_count);
+                }
+            }
         }
     }
 }
@@ -918,6 +1021,29 @@ v_bt_cache(struct v_world *world)
             V_VERBOSE("(M)Recursively do %lx", save_poi[i]->addr);
             _v_bt_cache(world, save_poi[i], 0, cache, &cache_count);
         }
+        if (save_poi[i]->type & V_INST_PB) {
+            struct v_poi_pb_cache *find =
+                v_find_pb_cache(world, save_poi[i]->addr);
+            int k;
+            if (find == NULL)
+                continue;
+            for (k = 0; k < find->total; k++) {
+                if (find->freq[k] >= 2) {
+                    unsigned long possible_ip = find->dest[k];
+                    unsigned long phys = g_v2p(world, possible_ip, 1);
+                    struct v_page *mpage = h_p2mp(world, phys);
+                    struct v_poi *possible_poi;
+                    if (mpage == NULL)
+                        continue;
+                    possible_poi = v_find_poi(mpage, possible_ip);
+                    if (possible_poi == NULL)
+                        continue;
+                    V_VERBOSE("Found poi %lx for %lx", possible_poi->addr,
+                        save_poi[i]->addr);
+                    _v_bt_cache(world, possible_poi, 0, cache, &cache_count);
+                }
+            }
+        }
     }
     h_bt_reset(world);
     for (i = 0; i < total; i++) {
@@ -926,4 +1052,5 @@ v_bt_cache(struct v_world *world)
     world->current_valid_bps = total;
     h_bt_cache(world, cache, cache_count);
 }
+
 #endif

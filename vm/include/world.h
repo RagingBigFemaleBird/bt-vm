@@ -51,6 +51,9 @@ struct v_world {
     struct v_poi *bp_to_poi[H_DEBUG_MAX_BP];
     unsigned int status;
     unsigned int relocate;
+#ifdef BT_CACHE
+    struct v_poi_pb_cache *pb_cache;
+#endif
 };
 
 struct v_world *v_create_world(unsigned long);

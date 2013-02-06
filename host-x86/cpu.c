@@ -108,33 +108,49 @@ h_cpu_save(struct v_world *w)
 }
 
 #ifdef BT_CACHE
+
+#define __TOTAL 0
+#define __SET 4
+#define __PB_TOTAL 8
+#define __PB_SET 12
+#define __PB_START 16
+#define __PB_ENTRIES (2 * BT_CACHE_CAPACITY)
+#define __CB_START (__PB_START + __PB_ENTRIES * 8)
 void
 h_bt_cache_restore(struct v_world *world)
 {
     void *cache = world->npage;
-    int total, set, dr7;
+    int total, set, dr7, pb_total, pb_set;
     struct h_bt_cache *hcache;
+    struct h_bt_pb_cache *h_pb_cache;
     cache += cache_offset;
     total = *((unsigned int *) cache);
-    set = *((unsigned int *) (cache + 4));
-    *((unsigned int *) (cache + 4)) = 0;
+    set = *((unsigned int *) (cache + __SET));
+    pb_total = *((unsigned int *) (cache + __PB_TOTAL));
+    pb_set = *((unsigned int *) (cache + __PB_SET));
+    *((unsigned int *) (cache + __SET)) = 0;
+    *((unsigned int *) (cache + __PB_SET)) = 0;
     V_VERBOSE("Total %x set %x", total, set);
-    if (total == 0 || set == 0)
-        return;
-    hcache = (struct h_bt_cache *) (cache + 8);
-    world->poi = hcache[total - set].poi;
-    world->poi->expect = 0;
-    *((unsigned int *) (cache + 4)) = 0;
-    V_LOG("BT restore poi to %lx", world->poi->addr);
-    world->current_valid_bps = world->poi->plan.count;
-    dr7 = world->hregs.gcpu.dr7 & 0xffffff00;
-    for (set = 0; set < world->poi->plan.count; set++) {
-        unsigned int *bpreg = &world->hregs.gcpu.dr0;
-        dr7 |= (0x300 | (2 << (set * 2)));
-        world->bp_to_poi[set] = world->poi->plan.poi[set];
-        bpreg[set] = world->bp_to_poi[set]->addr;
+    if (total != 0 && set != 0) {
+        hcache = (struct h_bt_cache *) (cache + __CB_START);
+        world->poi = hcache[total - set].poi;
+        world->poi->expect = 0;
+        V_LOG("BT restore poi to %lx", world->poi->addr);
+        world->current_valid_bps = world->poi->plan.count;
+        dr7 = world->hregs.gcpu.dr7 & 0xffffff00;
+        for (set = 0; set < world->poi->plan.count; set++) {
+            unsigned int *bpreg = &world->hregs.gcpu.dr0;
+            dr7 |= (0x300 | (2 << (set * 2)));
+            world->bp_to_poi[set] = world->poi->plan.poi[set];
+            bpreg[set] = world->bp_to_poi[set]->addr;
+        }
+        world->hregs.gcpu.dr7 = dr7;
+    } else if (pb_total != 0 && pb_set != 0) {
+        h_pb_cache = (struct h_bt_pb_cache *) (cache + __PB_START);
+        world->poi = h_pb_cache[pb_total - pb_set].poi;
+        world->poi->expect = 1;
+        V_VERBOSE("BT resotre pb poi to %lx", world->poi->addr);
     }
-    world->hregs.gcpu.dr7 = dr7;
 }
 
 void
@@ -143,10 +159,15 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
 {
     void *cache = world->npage;
     struct h_bt_cache *hcache;
+    struct h_bt_pb_cache *pb_cache;
     int i;
+    int pb_total = 0;
     cache += cache_offset;
     *((unsigned int *) cache) = count;
-    *((unsigned int *) (cache + 4)) = 0;
+    *((unsigned int *) (cache + __SET)) = 0;
+    *((unsigned int *) (cache + __PB_TOTAL)) = 0;
+    *((unsigned int *) (cache + __PB_SET)) = 0;
+    pb_cache = (struct h_bt_pb_cache *) (cache + __PB_START);
     V_VERBOSE("Cache total %x", count);
     if (count == 0)
         return;
@@ -160,11 +181,27 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
             unsigned int *bp = &hcache[i].dr0;
             hcache[i].dr7 |= (0x300 | (2 << (j * 2)));
             *(bp + j) = plan[i].plan->poi[j]->addr;
+            if ((plan[i].plan->poi[j]->type & V_INST_PB)
+                && pb_total <= 2 * BT_CACHE_CAPACITY) {
+                int k;
+                for (k = 0; k < __PB_ENTRIES; k++) {
+                    if (pb_cache[k].addr == plan[i].plan->poi[j]->addr) {
+                        goto found;
+                    }
+                }
+                pb_cache[pb_total].addr = plan[i].plan->poi[j]->addr;
+                pb_cache[pb_total].poi = plan[i].plan->poi[j];
+                V_VERBOSE("cache %x is %lx", pb_total, pb_cache[pb_total].addr);
+                pb_total++;
+              found:
+                asm volatile ("nop");
+            }
             V_VERBOSE("bp %x is %x", j, *(bp + j));
         }
         V_VERBOSE("dr7 is %x", hcache[i].dr7);
     }
-    h_memcpy(cache + 8, hcache, count * (sizeof(struct h_bt_cache)));
+    *((unsigned int *) (cache + __PB_TOTAL)) = pb_total;
+    h_memcpy(cache + __CB_START, hcache, count * (sizeof(struct h_bt_cache)));
     h_raw_dealloc(hcache);
 }
 #endif
@@ -172,17 +209,23 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
 #ifdef BT_CACHE
 #define CACHE_BT_CACHE(function_no) \
     asm volatile ("9:"); \
-	asm volatile ("push $0xbeef"); \
+    asm volatile ("push $0xbeef"); \
     asm volatile ("sub $4, %esp"); \
     asm volatile ("pusha"); \
     asm volatile ("mov $CacheStart"#function_no", %eax"); \
     asm volatile ("jmp 10f"); \
-	asm volatile (".balign 4"); \
-	asm volatile (".global CacheStart"#function_no); \
-	asm volatile ("CacheStart"#function_no":"); \
+    asm volatile (".balign 4"); \
+    asm volatile (".global CacheStart"#function_no); \
+    asm volatile ("CacheStart"#function_no":"); \
     asm volatile (".long 0"); \
     asm volatile (".long 0"); \
-	asm volatile (".rept 16"); \
+    asm volatile (".long 0"); \
+    asm volatile (".long 0"); \
+    asm volatile (".rept 32"); \
+    asm volatile (".long 0"); \
+    asm volatile (".long 0"); \
+    asm volatile (".endr"); \
+    asm volatile (".rept 16"); \
     asm volatile (".long 0"); \
     asm volatile (".long 0"); \
     asm volatile (".long 0"); \
@@ -216,7 +259,20 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
     asm volatile ("mov %dr3, %ecx"); \
     asm volatile ("24:"); \
     asm volatile ("mov %eax, %ebx"); /*edx must be preserved all the way here*/\
-    asm volatile ("add $8, %ebx"); \
+    asm volatile ("add $8, %ebx"); /* __PB_TOTAL*/\
+    asm volatile ("mov %cs:(%ebx), %edi"); \
+    asm volatile ("cmp $0, %edi"); \
+    asm volatile ("je 40f"); \
+    asm volatile ("sub $4, %ebx"); /* __PB_START sub to offset the following calculation*/\
+    asm volatile ("41:"); \
+    asm volatile ("add $8, %ebx"); /* __PB_START*/\
+    asm volatile ("cmp %cs:(%ebx), %ecx"); \
+    asm volatile ("je 50f"); \
+    asm volatile ("dec %edi"); \
+    asm volatile ("jnz 41b"); \
+    asm volatile ("40:"); \
+    asm volatile ("mov %eax, %ebx"); /*edx must be preserved all the way here*/\
+    asm volatile ("add $272, %ebx"); /* __CB_START*/\
     asm volatile ("20:"); \
     asm volatile ("mov %cs:(%ebx), %esi"); \
     asm volatile ("cmp %esi, %ecx"); \
@@ -239,6 +295,14 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
     asm volatile ("mov %eax, %dr3"); \
     asm volatile ("popa"); \
     asm volatile ("add $12, %esp"); \
+    asm volatile ("iret"); \
+    asm volatile ("50:"); \
+    asm volatile ("mov %edi, %ss:12(%eax)"); \
+    asm volatile ("mov %ss:104(%esp), %eax"); /* 13 * 8 = eflags position */ \
+    asm volatile ("or $0x10100, %eax"); /* TF | RF */ \
+    asm volatile ("mov %eax, %ss:104(%esp)"); \
+    asm volatile ("popa"); \
+    asm volatile ("add $12, %esp"); \
     asm volatile ("iret");
 #else
 #define CACHE_BT_CACHE(function_no)
@@ -246,15 +310,15 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
 
 #ifdef BT_CACHE
 #define CACHE_BT_QUICKPATH \
-	asm volatile ("cmp $(~0x1 + 0x80), (%esp)");\
-	asm volatile ("je 9f");
+    asm volatile ("cmp $(~0x1 + 0x80), (%esp)");\
+    asm volatile ("je 9f");
 #else
 #define CACHE_BT_QUICKPATH
 #endif
 
 #ifdef BT_CACHE
 #define CACHE_BT_RESTORE \
-	h_bt_cache_restore(w);
+    h_bt_cache_restore(w);
 #else
 #define CACHE_BT_RESTORE
 #endif
@@ -264,245 +328,245 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
 #define H_SWITCH_FUNCTION(function_no) \
 __attribute__((aligned(0x1000))) int h_switch_to##function_no(unsigned long trbase, struct v_world *w) \
 { \
-	h_addr_t tr = (h_addr_t) trbase; \
-	struct h_regs *h = &w->hregs; \
-	asm volatile ("cli"); \
-	if (w->status == VM_IDLE) { \
-		g_pic_serve (w); \
-	} \
-	if (w->status == VM_IDLE) { \
-		return 0; \
-	} \
+    h_addr_t tr = (h_addr_t) trbase; \
+    struct h_regs *h = &w->hregs; \
+    asm volatile ("cli"); \
+    if (w->status == VM_IDLE) { \
+        g_pic_serve (w); \
+    } \
+    if (w->status == VM_IDLE) { \
+        return 0; \
+    } \
         h_perf_tsc_begin(0);\
-	if (h->fpusaved) { \
-		asm volatile ("clts"); \
-	} else { \
-		asm volatile ("movl %0, %%cr0"::"r" (h->hcpu.cr0 | H_CR0_TS)); \
-	} \
-	asm ("movl %0, %%dr7"::"r"(w->hregs.gcpu.dr7)); \
-	asm ("movl %0, %%dr0"::"r"(w->hregs.gcpu.dr0)); \
-	asm ("movl %0, %%dr1"::"r"(w->hregs.gcpu.dr1)); \
-	asm ("movl %0, %%dr2"::"r"(w->hregs.gcpu.dr2)); \
-	asm ("movl %0, %%dr3"::"r"(w->hregs.gcpu.dr3)); \
-	{ \
-		void *gdt = (void*)(h->gcpu.gdt.base); \
-		unsigned int *c; \
-		gdt = gdt + (h->gcpu.tr&0xfff8); \
-		c = gdt+4; \
-		(*c) = (*c) & (0xfffffdff); \
-	} \
-	asm volatile ("lgdt (%0)"::"r"(&(h->gcpu.gdt))); \
-	asm volatile ("lidt (%0)"::"r"(&(h->gcpu.idt))); \
-	asm volatile ("lldt %%bx"::"ebx"(h->gcpu.ldt)); \
-	asm volatile ("ltr %%bx"::"ebx"(h->gcpu.tr)); \
+    if (h->fpusaved) { \
+        asm volatile ("clts"); \
+    } else { \
+        asm volatile ("movl %0, %%cr0"::"r" (h->hcpu.cr0 | H_CR0_TS)); \
+    } \
+    asm ("movl %0, %%dr7"::"r"(w->hregs.gcpu.dr7)); \
+    asm ("movl %0, %%dr0"::"r"(w->hregs.gcpu.dr0)); \
+    asm ("movl %0, %%dr1"::"r"(w->hregs.gcpu.dr1)); \
+    asm ("movl %0, %%dr2"::"r"(w->hregs.gcpu.dr2)); \
+    asm ("movl %0, %%dr3"::"r"(w->hregs.gcpu.dr3)); \
+    { \
+        void *gdt = (void*)(h->gcpu.gdt.base); \
+        unsigned int *c; \
+        gdt = gdt + (h->gcpu.tr&0xfff8); \
+        c = gdt+4; \
+        (*c) = (*c) & (0xfffffdff); \
+    } \
+    asm volatile ("lgdt (%0)"::"r"(&(h->gcpu.gdt))); \
+    asm volatile ("lidt (%0)"::"r"(&(h->gcpu.idt))); \
+    asm volatile ("lldt %%bx"::"ebx"(h->gcpu.ldt)); \
+    asm volatile ("ltr %%bx"::"ebx"(h->gcpu.tr)); \
 \
-	asm volatile ("mov %%esp, %0":"=r"(h->hcpu.save_esp)); \
-	asm volatile ("movl %0, %%esp"::"r"(&h->hcpu.save_esp)); \
-	asm volatile ("pusha"); \
-	asm volatile ("push %ds"); \
-	asm volatile ("push %es"); \
-	asm volatile ("push %fs"); \
-	asm volatile ("push %gs"); \
+    asm volatile ("mov %%esp, %0":"=r"(h->hcpu.save_esp)); \
+    asm volatile ("movl %0, %%esp"::"r"(&h->hcpu.save_esp)); \
+    asm volatile ("pusha"); \
+    asm volatile ("push %ds"); \
+    asm volatile ("push %es"); \
+    asm volatile ("push %fs"); \
+    asm volatile ("push %gs"); \
 \
-	asm volatile ("movl %0, %%cr3"::"r"(tr)); \
+    asm volatile ("movl %0, %%cr3"::"r"(tr)); \
 \
-	asm volatile ("mov %%esp, %0":"=r"(h->gcpu.save_esp)); \
+    asm volatile ("mov %%esp, %0":"=r"(h->gcpu.save_esp)); \
 \
-	asm volatile ("movl %0, %%esp"::"r"(&h->gcpu.gs)); \
+    asm volatile ("movl %0, %%esp"::"r"(&h->gcpu.gs)); \
 \
-	asm volatile ("pop %gs"); \
-	asm volatile ("pop %fs"); \
-	asm volatile ("pop %es"); \
-	asm volatile ("pop %ds"); \
+    asm volatile ("pop %gs"); \
+    asm volatile ("pop %fs"); \
+    asm volatile ("pop %es"); \
+    asm volatile ("pop %ds"); \
 \
-	asm volatile ("popa"); \
-	asm volatile ("add $12, %esp"); \
+    asm volatile ("popa"); \
+    asm volatile ("add $12, %esp"); \
 \
-	asm volatile ("iret"); \
+    asm volatile ("iret"); \
 \
-	asm volatile (".balign 32"); \
-	asm volatile ("5:"); \
-	asm volatile ("cmp $(~0x08 + 0x80), (%esp)");\
-	asm volatile ("je 3f"); \
-	asm volatile ("cmp $(~0x0a + 0x80), (%esp)");\
-	asm volatile ("je 3f"); \
-	asm volatile ("cmp $(~0x0b + 0x80), (%esp)");\
-	asm volatile ("je 3f"); \
-	asm volatile ("cmp $(~0x0c + 0x80), (%esp)");\
-	asm volatile ("je 3f"); \
-	asm volatile ("cmp $(~0x0e + 0x80), (%esp)");\
-	asm volatile ("je 3f"); \
-	asm volatile ("cmp $(~0x0d + 0x80), (%esp)");\
-	asm volatile ("je 3f"); \
-	asm volatile ("cmp $(~0x11 + 0x80), (%esp)");\
-	asm volatile ("je 3f"); \
+    asm volatile (".balign 32"); \
+    asm volatile ("5:"); \
+    asm volatile ("cmp $(~0x08 + 0x80), (%esp)");\
+    asm volatile ("je 3f"); \
+    asm volatile ("cmp $(~0x0a + 0x80), (%esp)");\
+    asm volatile ("je 3f"); \
+    asm volatile ("cmp $(~0x0b + 0x80), (%esp)");\
+    asm volatile ("je 3f"); \
+    asm volatile ("cmp $(~0x0c + 0x80), (%esp)");\
+    asm volatile ("je 3f"); \
+    asm volatile ("cmp $(~0x0e + 0x80), (%esp)");\
+    asm volatile ("je 3f"); \
+    asm volatile ("cmp $(~0x0d + 0x80), (%esp)");\
+    asm volatile ("je 3f"); \
+    asm volatile ("cmp $(~0x11 + 0x80), (%esp)");\
+    asm volatile ("je 3f"); \
     CACHE_BT_QUICKPATH \
 \
-	asm volatile ("push $0xbeef"); /* some impossible value */\
+    asm volatile ("push $0xbeef"); /* some impossible value */\
 \
-	asm volatile ("3:"); \
+    asm volatile ("3:"); \
 \
-	asm volatile ("sub $4, %esp");\
+    asm volatile ("sub $4, %esp");\
 \
-	asm volatile ("pusha"); \
+    asm volatile ("pusha"); \
     asm volatile ("8:"); \
-	asm volatile ("push %ds"); \
-	asm volatile ("push %es"); \
-	asm volatile ("push %fs"); \
-	asm volatile ("push %gs"); \
+    asm volatile ("push %ds"); \
+    asm volatile ("push %es"); \
+    asm volatile ("push %fs"); \
+    asm volatile ("push %gs"); \
 \
-	asm volatile ("add $48, %esp"); \
-	asm volatile ("pop %esp"); \
+    asm volatile ("add $48, %esp"); \
+    asm volatile ("pop %esp"); \
 \
-	asm volatile ("add $16, %esp"); \
-	asm volatile ("mov %ss, %ax"); \
-	asm volatile ("mov %ax, %ds"); \
-	asm volatile ("mov %ax, %es"); \
-	asm volatile ("popa"); \
-	asm volatile ("pop %esp"); \
+    asm volatile ("add $16, %esp"); \
+    asm volatile ("mov %ss, %ax"); \
+    asm volatile ("mov %ax, %ds"); \
+    asm volatile ("mov %ax, %es"); \
+    asm volatile ("popa"); \
+    asm volatile ("pop %esp"); \
 \
-	asm volatile ("movl %0, %%cr3"::"r"(h->hcpu.cr3)); \
+    asm volatile ("movl %0, %%cr3"::"r"(h->hcpu.cr3)); \
 \
-	asm volatile ("lgdt (%0)"::"r"(&(h->hcpu.gdt))); \
-	asm volatile ("lidt (%0)"::"r"(&(h->hcpu.idt))); \
-	asm volatile ("lldt %%bx"::"ebx"(h->hcpu.ldt)); \
-	{ \
-		void *gdt = (void*)(h->hcpu.gdt.base); \
-		unsigned int *c; \
-		gdt = gdt + (h->hcpu.tr&0xfff8); \
-		c = gdt+4; \
-		(*c) = (*c) & (0xfffffdff); \
-	} \
+    asm volatile ("lgdt (%0)"::"r"(&(h->hcpu.gdt))); \
+    asm volatile ("lidt (%0)"::"r"(&(h->hcpu.idt))); \
+    asm volatile ("lldt %%bx"::"ebx"(h->hcpu.ldt)); \
+    { \
+        void *gdt = (void*)(h->hcpu.gdt.base); \
+        unsigned int *c; \
+        gdt = gdt + (h->hcpu.tr&0xfff8); \
+        c = gdt+4; \
+        (*c) = (*c) & (0xfffffdff); \
+    } \
 \
-	asm volatile ("ltr %%bx"::"ebx"(h->hcpu.tr)); \
+    asm volatile ("ltr %%bx"::"ebx"(h->hcpu.tr)); \
 \
-	asm volatile ("mov %0,%%eax"::"r"(h->hcpu.ds):"eax"); \
-	asm volatile ("mov %ax,%ds"); \
-	asm volatile ("mov %0,%%eax"::"r"(h->hcpu.es):"eax"); \
-	asm volatile ("mov %ax,%es"); \
-	asm volatile ("mov %0,%%eax"::"r"(h->hcpu.fs):"eax"); \
-	asm volatile ("mov %ax,%fs"); \
-	asm volatile ("mov %0,%%eax"::"r"(h->hcpu.gs):"eax"); \
-	asm volatile ("mov %ax,%gs"); \
-	asm volatile ("mov %0,%%eax"::"r"(h->hcpu.ss):"eax"); \
-	asm volatile ("mov %ax,%ss"); \
+    asm volatile ("mov %0,%%eax"::"r"(h->hcpu.ds):"eax"); \
+    asm volatile ("mov %ax,%ds"); \
+    asm volatile ("mov %0,%%eax"::"r"(h->hcpu.es):"eax"); \
+    asm volatile ("mov %ax,%es"); \
+    asm volatile ("mov %0,%%eax"::"r"(h->hcpu.fs):"eax"); \
+    asm volatile ("mov %ax,%fs"); \
+    asm volatile ("mov %0,%%eax"::"r"(h->hcpu.gs):"eax"); \
+    asm volatile ("mov %ax,%gs"); \
+    asm volatile ("mov %0,%%eax"::"r"(h->hcpu.ss):"eax"); \
+    asm volatile ("mov %ax,%ss"); \
 \
     if (h->gcpu.intr == 0xbeef) { \
-		h->gcpu.intr = h->gcpu.errorc; \
+        h->gcpu.intr = h->gcpu.errorc; \
     }\
-	h->gcpu.intr = ~((int)(h->gcpu.intr) - 0x80); \
+    h->gcpu.intr = ~((int)(h->gcpu.intr) - 0x80); \
 \
     asm volatile ("mov %%cr2, %0":"=r"(trbase)); /*using trbase as temp var*/\
-	asm volatile ("push %0"::"r"(h->hcpu.eflags)); \
-	asm volatile ("push %0"::"r"(h->hcpu.cs)); \
-	asm volatile ("push %0"::"r"(h->hcpu.eip)); \
-	asm volatile ("iret"); \
+    asm volatile ("push %0"::"r"(h->hcpu.eflags)); \
+    asm volatile ("push %0"::"r"(h->hcpu.cs)); \
+    asm volatile ("push %0"::"r"(h->hcpu.eip)); \
+    asm volatile ("iret"); \
 \
 \
-	asm volatile (".global restoreCS"#function_no); \
-	asm volatile ("restoreCS"#function_no":"); \
+    asm volatile (".global restoreCS"#function_no); \
+    asm volatile ("restoreCS"#function_no":"); \
     h_perf_tsc_end(H_PERF_TSC_GUEST, 0);\
     h_perf_tsc_begin(0);\
-	v_perf_inc(V_PERF_WS, 1); \
-	V_EVENT("cs:eip = %x:%x \t", h->gcpu.cs, h->gcpu.eip); \
-	V_LOG("%s %s %s IOPL%x RING%x ds:%x, es:%x, ss:%x, esp:%x, cs:%x, eip:%x, eflags:%x, eax:%x, ebx:%x, ecx:%x, edx:%x, esi:%x, edi:%x, ebp:%x, errorcode:%x, save_esp:%x, tr:%x, intr:%x, v86ds:%x, v86es:%x, cstrue:%x, dstrue:%x, estrue:%x, sstrue:%x, trbase: %x, spt: %lx\n", w->gregs.mode==G_MODE_REAL?"RM":(g_get_current_ex_mode(w)==G_EX_MODE_32?"32":"16"), v_int_enabled(w)?"IE":"--", w->gregs.nt?"NT":"--", w->gregs.iopl, w->gregs.ring, h->gcpu.ds, h->gcpu.es, h->gcpu.ss, h->gcpu.esp, h->gcpu.cs, h->gcpu.eip, h->gcpu.eflags, h->gcpu.eax, h->gcpu.ebx, h->gcpu.ecx, h->gcpu.edx, h->gcpu.esi, h->gcpu.edi, h->gcpu.ebp, h->gcpu.errorc, h->gcpu.save_esp, h->gcpu.tr, h->gcpu.intr, h->gcpu.v86ds, h->gcpu.v86es, w->gregs.cstrue, w->gregs.dstrue, w->gregs.estrue, w->gregs.sstrue, w->gregs.cr3, w->htrbase); \
+    v_perf_inc(V_PERF_WS, 1); \
+    V_EVENT("cs:eip = %x:%x \t", h->gcpu.cs, h->gcpu.eip); \
+    V_LOG("%s %s %s IOPL%x RING%x ds:%x, es:%x, ss:%x, esp:%x, cs:%x, eip:%x, eflags:%x, eax:%x, ebx:%x, ecx:%x, edx:%x, esi:%x, edi:%x, ebp:%x, errorcode:%x, save_esp:%x, tr:%x, intr:%x, v86ds:%x, v86es:%x, cstrue:%x, dstrue:%x, estrue:%x, sstrue:%x, trbase: %x, spt: %lx\n", w->gregs.mode==G_MODE_REAL?"RM":(g_get_current_ex_mode(w)==G_EX_MODE_32?"32":"16"), v_int_enabled(w)?"IE":"--", w->gregs.nt?"NT":"--", w->gregs.iopl, w->gregs.ring, h->gcpu.ds, h->gcpu.es, h->gcpu.ss, h->gcpu.esp, h->gcpu.cs, h->gcpu.eip, h->gcpu.eflags, h->gcpu.eax, h->gcpu.ebx, h->gcpu.ecx, h->gcpu.edx, h->gcpu.esi, h->gcpu.edi, h->gcpu.ebp, h->gcpu.errorc, h->gcpu.save_esp, h->gcpu.tr, h->gcpu.intr, h->gcpu.v86ds, h->gcpu.v86es, w->gregs.cstrue, w->gregs.dstrue, w->gregs.estrue, w->gregs.sstrue, w->gregs.cr3, w->htrbase); \
     CACHE_BT_RESTORE \
-	if (w->poi && w->poi->expect && (h->gcpu.intr&0xff)<0x20 && (h->gcpu.intr&0xff)!=0x0e && (h->gcpu.intr&0xff)!=0x01 && w->poi->addr == g_get_ip(w)) { \
-		V_ALERT("POI ip == ip but not taking BP?"); \
-	} \
-	if ((h->gcpu.intr&0xff)==0x01) {\
-		unsigned int dr; \
-		if ((!bp_reached) && g_get_ip(w) == bpaddr ) {\
-			unsigned char *fb; \
-			w->status = VM_PAUSED;  \
-			bp_reached = 1;  \
-			h_clear_bp(w, 3); \
-			fb = g_fb_dump_text(w); \
-			V_ERR("BP reached"); \
-			h_raw_dealloc(fb); \
-		}\
-		v_perf_inc(V_PERF_BT, 1); \
-		asm volatile ("mov %%dr6, %0":"=r"(dr)); \
-		v_do_bp(w, g_get_ip(w), (dr&0x4000)?1:0); \
-		dr &= 0xffff0ff0; \
-		asm volatile ("mov %0, %%dr6"::"r"(dr)); \
+    if (w->poi && w->poi->expect && (h->gcpu.intr&0xff)<0x20 && (h->gcpu.intr&0xff)!=0x0e && (h->gcpu.intr&0xff)!=0x01 && w->poi->addr == g_get_ip(w)) { \
+        V_ALERT("POI ip == ip but not taking BP?"); \
+    } \
+    if ((h->gcpu.intr&0xff)==0x01) {\
+        unsigned int dr; \
+        if ((!bp_reached) && g_get_ip(w) == bpaddr ) {\
+            unsigned char *fb; \
+            w->status = VM_PAUSED;  \
+            bp_reached = 1;  \
+            h_clear_bp(w, 3); \
+            fb = g_fb_dump_text(w); \
+            V_ERR("BP reached"); \
+            h_raw_dealloc(fb); \
+        }\
+        v_perf_inc(V_PERF_BT, 1); \
+        asm volatile ("mov %%dr6, %0":"=r"(dr)); \
+        v_do_bp(w, g_get_ip(w), (dr&0x4000)?1:0); \
+        dr &= 0xffff0ff0; \
+        asm volatile ("mov %0, %%dr6"::"r"(dr)); \
         h_perf_tsc_end(H_PERF_TSC_BT, 0); \
         g_pic_serve (w); \
-		return 1; \
-	} else if ((h->gcpu.intr&0xff)==0x0e) {\
-		unsigned int fault; \
-		v_perf_inc(V_PERF_PF, 1); \
-		if ((fault = v_pagefault(w, trbase, ((h->gcpu.errorc&0x1)==0?V_MM_FAULT_NP:0) | ((h->gcpu.errorc&0x2)?V_MM_FAULT_W:0)))!=V_MM_FAULT_HANDLED) {\
-			w->gregs.has_errorc = 1; \
-			w->gregs.errorc = ((fault & V_MM_FAULT_NP)? 0 : 1) | ((fault & V_MM_FAULT_W)? 2 : 0) | ((w->gregs.ring == 0)? 0 : 4); \
-			w->gregs.cr2 = trbase; \
-			h_inject_int(w, 0x0e); \
-		} \
+        return 1; \
+    } else if ((h->gcpu.intr&0xff)==0x0e) {\
+        unsigned int fault; \
+        v_perf_inc(V_PERF_PF, 1); \
+        if ((fault = v_pagefault(w, trbase, ((h->gcpu.errorc&0x1)==0?V_MM_FAULT_NP:0) | ((h->gcpu.errorc&0x2)?V_MM_FAULT_W:0)))!=V_MM_FAULT_HANDLED) {\
+            w->gregs.has_errorc = 1; \
+            w->gregs.errorc = ((fault & V_MM_FAULT_NP)? 0 : 1) | ((fault & V_MM_FAULT_W)? 2 : 0) | ((w->gregs.ring == 0)? 0 : 4); \
+            w->gregs.cr2 = trbase; \
+            h_inject_int(w, 0x0e); \
+        } \
         h_perf_tsc_end(H_PERF_TSC_PF, 0); \
-		return 1; \
-	} else if ((h->gcpu.intr&0xff)==0x07) {\
+        return 1; \
+    } else if ((h->gcpu.intr&0xff)==0x07) {\
         V_ALERT("FPU"); \
-		h->fpusaved = 1; \
+        h->fpusaved = 1; \
         v_bt_reset(w); \
         return 1; \
-	} else if ((h->gcpu.intr&0xff)==0x0d) {\
-		v_perf_inc(V_PERF_PI, 1); \
-		h_gpfault(w); \
+    } else if ((h->gcpu.intr&0xff)==0x0d) {\
+        v_perf_inc(V_PERF_PI, 1); \
+        h_gpfault(w); \
         h_perf_tsc_end(H_PERF_TSC_PI, 0); \
-		return 1; \
-	} else if ((h->gcpu.intr&0xff)==0x0a) {\
-		V_ERR(",Unidentified tss fault"); \
-		w->status = VM_PAUSED; \
-	} else if ((h->gcpu.intr&0xff)==0x06) {\
-		unsigned char bound[20]; \
-		unsigned int g_ip = g_get_ip(w); \
-		unsigned char* inst; \
-		h_read_guest(w, g_ip, (unsigned int*)&bound[0]); \
-		h_read_guest(w, g_ip + 4, (unsigned int*)&bound[4]); \
-		h_read_guest(w, g_ip + 8, (unsigned int*)&bound[8]); \
-		h_read_guest(w, g_ip + 12, (unsigned int*)&bound[12]); \
-		inst = (unsigned char*)&bound; \
-		V_ERR("invalid opcode: %x %x %x %x", (unsigned int)(*(inst+0)), (unsigned int)(*(inst+1)), (unsigned int)(*(inst+2)), (unsigned int)(*(inst+3))); \
-		w->status = VM_PAUSED; \
-	} else if ((h->gcpu.intr&0xff)==0xef) {\
-		time_up = 1; \
+        return 1; \
+    } else if ((h->gcpu.intr&0xff)==0x0a) {\
+        V_ERR(",Unidentified tss fault"); \
+        w->status = VM_PAUSED; \
+    } else if ((h->gcpu.intr&0xff)==0x06) {\
+        unsigned char bound[20]; \
+        unsigned int g_ip = g_get_ip(w); \
+        unsigned char* inst; \
+        h_read_guest(w, g_ip, (unsigned int*)&bound[0]); \
+        h_read_guest(w, g_ip + 4, (unsigned int*)&bound[4]); \
+        h_read_guest(w, g_ip + 8, (unsigned int*)&bound[8]); \
+        h_read_guest(w, g_ip + 12, (unsigned int*)&bound[12]); \
+        inst = (unsigned char*)&bound; \
+        V_ERR("invalid opcode: %x %x %x %x", (unsigned int)(*(inst+0)), (unsigned int)(*(inst+1)), (unsigned int)(*(inst+2)), (unsigned int)(*(inst+3))); \
+        w->status = VM_PAUSED; \
+    } else if ((h->gcpu.intr&0xff)==0xef) {\
+        time_up = 1; \
         g_pic_serve (w); \
-	} else {\
-		V_LOG("Warning int %x not received by host.\n", h->gcpu.intr&0xff); \
+    } else {\
+        V_LOG("Warning int %x not received by host.\n", h->gcpu.intr&0xff); \
         g_pic_serve (w); \
-	} \
-	if ((h->gcpu.intr&0xff)>=0x20)	h_do_int(h->gcpu.intr&0xff); \
+    } \
+    if ((h->gcpu.intr&0xff)>=0x20)    h_do_int(h->gcpu.intr&0xff); \
 \
-	if (h->fpusaved) { \
-		h->fpusaved = 0; \
-	} \
-	asm volatile ("jmp 6f"); \
+    if (h->fpusaved) { \
+        h->fpusaved = 0; \
+    } \
+    asm volatile ("jmp 6f"); \
     asm volatile ("7:"); \
     CACHE_BT_CACHE(function_no) \
 \
 \
-	asm volatile (".balign 32"); \
-	asm volatile (".global TrapStart"#function_no); \
-	asm volatile ("TrapStart"#function_no":"); \
+    asm volatile (".balign 32"); \
+    asm volatile (".global TrapStart"#function_no); \
+    asm volatile ("TrapStart"#function_no":"); \
     asm volatile ("vector=0"); \
-	asm volatile (".rept (256+6)/7"); \
-	asm volatile (".balign 32"); \
-	asm volatile (".rept 7"); \
-	asm volatile ("    .if vector < 256"); \
-	asm volatile ("        push $(~vector+0x80)"); \
-	asm volatile ("        .if ((vector)%7) <> 6"); \
-	asm volatile ("            jmp 2f"); \
-	asm volatile ("        .endif"); \
+    asm volatile (".rept (256+6)/7"); \
+    asm volatile (".balign 32"); \
+    asm volatile (".rept 7"); \
+    asm volatile ("    .if vector < 256"); \
+    asm volatile ("        push $(~vector+0x80)"); \
+    asm volatile ("        .if ((vector)%7) <> 6"); \
+    asm volatile ("            jmp 2f"); \
+    asm volatile ("        .endif"); \
     asm volatile ("        vector=vector+1"); \
-	asm volatile ("    .endif"); \
-	asm volatile (".endr"); \
-	asm volatile ("2: jmp 4f"); \
-	asm volatile (".endr"); \
+    asm volatile ("    .endif"); \
+    asm volatile (".endr"); \
+    asm volatile ("2: jmp 4f"); \
+    asm volatile (".endr"); \
 \
-	asm volatile ("4:"); \
-	asm volatile ("jmp 5b"); \
-	asm volatile ("6:"); \
-	return 0; \
+    asm volatile ("4:"); \
+    asm volatile ("jmp 5b"); \
+    asm volatile ("6:"); \
+    return 0; \
 }
 
 H_SWITCH_FUNCTION(1)

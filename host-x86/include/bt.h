@@ -38,6 +38,11 @@ struct h_bt_cache {
     struct v_poi *poi;
 };
 
+struct h_bt_pb_cache {
+    unsigned long addr;
+    struct v_poi *poi;
+};
+
 struct v_poi_cached_tree_plan;
 void h_bt_cache(struct v_world *, struct v_poi_cached_tree_plan *, int);
 void h_bt_cache_restore(struct v_world *);
