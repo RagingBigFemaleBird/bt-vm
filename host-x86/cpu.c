@@ -145,7 +145,7 @@ h_bt_cache_restore(struct v_world *world)
     V_VERBOSE("dr2 is %x", dr7);
     asm volatile ("mov %%dr3, %0":"=r"(dr7));
     V_VERBOSE("dr3 is %x", dr7);
-    V_ERR("Total %x set %x, pb Total %x set %x", total, set, pb_total, pb_set);
+    V_VERBOSE("Total %x set %x, pb Total %x set %x", total, set, pb_total, pb_set);
     if (total != 0 && set != 0) {
         hcache = (struct h_bt_cache *) (cache + __CB_START);
         world->poi = hcache[total - set].poi;
@@ -161,22 +161,8 @@ h_bt_cache_restore(struct v_world *world)
         }
         world->hregs.gcpu.dr7 = dr7;
     } else if (pb_total != 0 && pb_set != 0) {
-        unsigned int dr;
-        asm volatile ("mov %%dr6, %0":"=r"(dr));
-        if (world->hregs.gcpu.intr != 1) {
-            V_ERR("Didn't do what we expect it to do! %x", dr);
-            world->status = VM_PAUSED;
-        }
-        if (!(dr&0x4000)) {
-            V_ERR("Didn't do what we expect it to do! %x", dr);
-            world->status = VM_PAUSED;
-        }
         h_pb_cache = (struct h_bt_pb_cache *) (cache + __PB_START);
         world->poi = h_pb_cache[pb_total - pb_set].poi;
-        if (world->poi->addr == g_get_ip(world)) {
-            V_ERR("Didn't do what we expect it to do!");
-            world->status = VM_PAUSED;
-        }
         world->poi->expect = 1;
         V_VERBOSE("BT resotre pb poi to %lx", world->poi->addr);
         world->hregs.gcpu.dr7 &= 0xffffff00;
@@ -201,36 +187,36 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
     *((unsigned int *) (cache + __PB_SET)) = 0;
     pb_cache = (struct h_bt_pb_cache *) (cache + __PB_START);
     V_VERBOSE("Cache total %x", count);
-    if (count == 0)
-        return;
-    hcache = (struct h_bt_cache *) (cache + __CB_START);
-    for (i = 0; i < count; i++) {
-        int j;
-        hcache[i].poi = plan[i].poi;
-        hcache[i].addr = plan[i].addr;
-        hcache[i].dr7 = world->hregs.gcpu.dr7 & (0xffffff00);
-        for (j = 0; j < plan[i].plan->count; j++) {
-            unsigned int *bp = &hcache[i].dr0;
-            hcache[i].dr7 |= (0x300 | (2 << (j * 2)));
-            *(bp + j) = plan[i].plan->poi[j]->addr;
-            if ((plan[i].plan->poi[j]->type & V_INST_PB)
-                && pb_total <= 2 * BT_CACHE_CAPACITY) {
-                int k;
-                for (k = 0; k < pb_total; k++) {
-                    if (pb_cache[k].addr == plan[i].plan->poi[j]->addr) {
-                        goto found;
+    if (count != 0) {
+        hcache = (struct h_bt_cache *) (cache + __CB_START);
+        for (i = 0; i < count; i++) {
+            int j;
+            hcache[i].poi = plan[i].poi;
+            hcache[i].addr = plan[i].addr;
+            hcache[i].dr7 = world->hregs.gcpu.dr7 & (0xffffff00);
+            for (j = 0; j < plan[i].plan->count; j++) {
+                unsigned int *bp = &hcache[i].dr0;
+                hcache[i].dr7 |= (0x300 | (2 << (j * 2)));
+                *(bp + j) = plan[i].plan->poi[j]->addr;
+                if ((plan[i].plan->poi[j]->type & V_INST_PB)
+                    && pb_total <= 2 * BT_CACHE_CAPACITY) {
+                    int k;
+                    for (k = 0; k < pb_total; k++) {
+                        if (pb_cache[k].addr == plan[i].plan->poi[j]->addr) {
+                            goto found;
+                        }
                     }
+                    pb_cache[pb_total].addr = plan[i].plan->poi[j]->addr;
+                    pb_cache[pb_total].poi = plan[i].plan->poi[j];
+                    V_VERBOSE("cache %x is %lx", pb_total, pb_cache[pb_total].addr);
+                    pb_total++;
+                  found:
+                    asm volatile ("nop");
                 }
-                pb_cache[pb_total].addr = plan[i].plan->poi[j]->addr;
-                pb_cache[pb_total].poi = plan[i].plan->poi[j];
-                V_VERBOSE("cache %x is %lx", pb_total, pb_cache[pb_total].addr);
-                pb_total++;
-              found:
-                asm volatile ("nop");
+                V_VERBOSE("bp %x is %x", j, *(bp + j));
             }
-            V_VERBOSE("bp %x is %x", j, *(bp + j));
+            V_VERBOSE("dr7 is %x", hcache[i].dr7);
         }
-        V_VERBOSE("dr7 is %x", hcache[i].dr7);
     }
     for (i = 0; i < world->current_valid_bps; i++) {
         if ((world->bp_to_poi[i]->type & V_INST_PB)
@@ -283,9 +269,10 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
     asm volatile (".endr"); \
     asm volatile ("10:"); \
     asm volatile ("mov %cs:(%eax), %edx"); \
-    asm volatile ("cmp $0, %edx"); \
+    asm volatile ("mov %cs:8(%eax), %ecx"); \
+    asm volatile ("mov %edx, %ebx"); \
+    asm volatile ("or %ecx, %ebx"); \
     asm volatile ("je 8b"); \
-    asm volatile ("jne 8b"); \
     asm volatile ("mov %dr6, %ecx"); \
     asm volatile ("test $0x4000, %ecx"); \
     asm volatile ("jz 60f"); \
@@ -319,7 +306,6 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
     asm volatile ("mov %cs:(%ebx), %edi"); \
     asm volatile ("cmp $0, %edi"); \
     asm volatile ("je 40f"); \
-    asm volatile ("sub $4, %ebx"); /* __PB_START sub to offset the following calculation*/\
     asm volatile ("41:"); \
     asm volatile ("add $8, %ebx"); /* __PB_START*/\
     asm volatile ("cmp %cs:(%ebx), %ecx"); \
@@ -327,6 +313,8 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
     asm volatile ("dec %edi"); \
     asm volatile ("jnz 41b"); \
     asm volatile ("40:"); \
+    asm volatile ("test %edx, %edx"); \
+    asm volatile ("jz 8b"); \
     asm volatile ("mov %eax, %ebx"); /*edx must be preserved all the way here*/\
     asm volatile ("add $272, %ebx"); /* __CB_START*/\
     asm volatile ("20:"); \
@@ -354,6 +342,7 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
     asm volatile ("popa"); \
     asm volatile ("add $12, %esp"); \
     asm volatile ("iret"); \
+    asm volatile ("jmp 8b"); \
     asm volatile ("50:"); \
     asm volatile ("mov %edi, %ss:12(%eax)"); \
     asm volatile ("xor %edi, %edi"); \
@@ -366,7 +355,8 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
     asm volatile ("mov %eax, %ss:104(%esp)"); \
     asm volatile ("popa"); \
     asm volatile ("add $12, %esp"); \
-    asm volatile ("iret");
+    asm volatile ("iret"); \
+    asm volatile ("jmp 8b");
 #else
 #define CACHE_BT_CACHE(function_no)
 #endif
