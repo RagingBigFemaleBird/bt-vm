@@ -116,6 +116,15 @@ h_cpu_save(struct v_world *w)
 #define __PB_START 16
 #define __PB_ENTRIES (2 * BT_CACHE_CAPACITY)
 #define __CB_START (__PB_START + __PB_ENTRIES * 8)
+
+void
+h_bt_squash_pb(struct v_world *world)
+{
+    void *cache = world->npage;
+    cache += cache_offset;
+    *((unsigned int *) (cache + __PB_TOTAL)) = 0;
+}
+
 void
 h_bt_cache_restore(struct v_world *world)
 {
@@ -128,9 +137,15 @@ h_bt_cache_restore(struct v_world *world)
     set = *((unsigned int *) (cache + __SET));
     pb_total = *((unsigned int *) (cache + __PB_TOTAL));
     pb_set = *((unsigned int *) (cache + __PB_SET));
-    *((unsigned int *) (cache + __SET)) = 0;
-    *((unsigned int *) (cache + __PB_SET)) = 0;
-    V_VERBOSE("Total %x set %x", total, set);
+    asm volatile ("mov %%dr0, %0":"=r"(dr7));
+    V_VERBOSE("dr0 is %x", dr7);
+    asm volatile ("mov %%dr1, %0":"=r"(dr7));
+    V_VERBOSE("dr1 is %x", dr7);
+    asm volatile ("mov %%dr2, %0":"=r"(dr7));
+    V_VERBOSE("dr2 is %x", dr7);
+    asm volatile ("mov %%dr3, %0":"=r"(dr7));
+    V_VERBOSE("dr3 is %x", dr7);
+    V_ERR("Total %x set %x, pb Total %x set %x", total, set, pb_total, pb_set);
     if (total != 0 && set != 0) {
         hcache = (struct h_bt_cache *) (cache + __CB_START);
         world->poi = hcache[total - set].poi;
@@ -146,11 +161,28 @@ h_bt_cache_restore(struct v_world *world)
         }
         world->hregs.gcpu.dr7 = dr7;
     } else if (pb_total != 0 && pb_set != 0) {
+        unsigned int dr;
+        asm volatile ("mov %%dr6, %0":"=r"(dr));
+        if (world->hregs.gcpu.intr != 1) {
+            V_ERR("Didn't do what we expect it to do! %x", dr);
+            world->status = VM_PAUSED;
+        }
+        if (!(dr&0x4000)) {
+            V_ERR("Didn't do what we expect it to do! %x", dr);
+            world->status = VM_PAUSED;
+        }
         h_pb_cache = (struct h_bt_pb_cache *) (cache + __PB_START);
         world->poi = h_pb_cache[pb_total - pb_set].poi;
+        if (world->poi->addr == g_get_ip(world)) {
+            V_ERR("Didn't do what we expect it to do!");
+            world->status = VM_PAUSED;
+        }
         world->poi->expect = 1;
         V_VERBOSE("BT resotre pb poi to %lx", world->poi->addr);
+        world->hregs.gcpu.dr7 &= 0xffffff00;
     }
+    *((unsigned int *) (cache + __SET)) = 0;
+    *((unsigned int *) (cache + __PB_SET)) = 0;
 }
 
 void
@@ -171,7 +203,7 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
     V_VERBOSE("Cache total %x", count);
     if (count == 0)
         return;
-    hcache = h_raw_malloc(count * (sizeof(struct h_bt_cache)));
+    hcache = (struct h_bt_cache *) (cache + __CB_START);
     for (i = 0; i < count; i++) {
         int j;
         hcache[i].poi = plan[i].poi;
@@ -184,7 +216,7 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
             if ((plan[i].plan->poi[j]->type & V_INST_PB)
                 && pb_total <= 2 * BT_CACHE_CAPACITY) {
                 int k;
-                for (k = 0; k < __PB_ENTRIES; k++) {
+                for (k = 0; k < pb_total; k++) {
                     if (pb_cache[k].addr == plan[i].plan->poi[j]->addr) {
                         goto found;
                     }
@@ -200,9 +232,24 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
         }
         V_VERBOSE("dr7 is %x", hcache[i].dr7);
     }
+    for (i = 0; i < world->current_valid_bps; i++) {
+        if ((world->bp_to_poi[i]->type & V_INST_PB)
+            && pb_total <= 2 * BT_CACHE_CAPACITY) {
+            int k;
+            for (k = 0; k < pb_total; k++) {
+                if (pb_cache[k].addr == world->bp_to_poi[i]->addr) {
+                    goto found1;
+                }
+            }
+            pb_cache[pb_total].addr = world->bp_to_poi[i]->addr;
+            pb_cache[pb_total].poi = world->bp_to_poi[i];
+            V_VERBOSE("cache %x is %lx", pb_total, pb_cache[pb_total].addr);
+            pb_total++;
+          found1:
+            asm volatile ("nop");
+        }
+    }
     *((unsigned int *) (cache + __PB_TOTAL)) = pb_total;
-    h_memcpy(cache + __CB_START, hcache, count * (sizeof(struct h_bt_cache)));
-    h_raw_dealloc(hcache);
 }
 #endif
 
@@ -238,7 +285,16 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
     asm volatile ("mov %cs:(%eax), %edx"); \
     asm volatile ("cmp $0, %edx"); \
     asm volatile ("je 8b"); \
+    asm volatile ("jne 8b"); \
     asm volatile ("mov %dr6, %ecx"); \
+    asm volatile ("test $0x4000, %ecx"); \
+    asm volatile ("jz 60f"); \
+    asm volatile ("mov %ss:104(%esp), %ecx"); /* 13 * 8 = eflags position */ \
+    asm volatile ("and $0xfffefeff, %ecx"); /* no TF & RF */ \
+    asm volatile ("mov %ecx, %ss:104(%esp)"); \
+    asm volatile ("mov %ss:96(%esp), %ecx"); /* assuming flat layout. fix if not */ \
+    asm volatile ("jmp 24f"); \
+    asm volatile ("60:"); \
     asm volatile ("test $1, %ecx"); \
     asm volatile ("je 21f"); \
     asm volatile ("mov %dr0, %ecx"); \
@@ -283,9 +339,8 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
     asm volatile ("jmp 8b"); \
     asm volatile ("30:"); \
     asm volatile ("mov %edx, %ss:4(%eax)"); \
-    asm volatile ("mov %ss:104(%esp), %eax"); /* 13 * 8 = eflags position */ \
-    asm volatile ("and $0xfffeffff, %eax"); /* no RF */ \
-    asm volatile ("mov %eax, %ss:104(%esp)"); \
+    asm volatile ("xor %edx, %edx"); \
+    asm volatile ("mov %edx, %ss:12(%eax)"); \
     asm volatile ("mov %cs:4(%ebx), %eax"); \
     asm volatile ("mov %eax, %dr7"); \
     asm volatile ("mov %cs:8(%ebx), %eax"); \
@@ -301,6 +356,11 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
     asm volatile ("iret"); \
     asm volatile ("50:"); \
     asm volatile ("mov %edi, %ss:12(%eax)"); \
+    asm volatile ("xor %edi, %edi"); \
+    asm volatile ("mov %edi, %ss:4(%eax)"); \
+    asm volatile ("mov %dr7, %eax"); \
+    asm volatile ("and $0xffffff00, %eax"); \
+    asm volatile ("mov %eax, %dr7"); \
     asm volatile ("mov %ss:104(%esp), %eax"); /* 13 * 8 = eflags position */ \
     asm volatile ("or $0x10100, %eax"); /* TF | RF */ \
     asm volatile ("mov %eax, %ss:104(%esp)"); \
@@ -326,7 +386,6 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
 #define CACHE_BT_RESTORE
 #endif
 
-
 /*todo: save fpu properly */
 #define H_SWITCH_FUNCTION(function_no) \
 __attribute__((aligned(0x1000))) int h_switch_to##function_no(unsigned long trbase, struct v_world *w) \
@@ -335,7 +394,7 @@ __attribute__((aligned(0x1000))) int h_switch_to##function_no(unsigned long trba
     struct h_regs *h = &w->hregs; \
     asm volatile ("cli"); \
     if (w->status == VM_IDLE) { \
-        g_pic_serve (w); \
+        if (!(h->gcpu.eflags & H_EFLAGS_TF)) g_pic_serve (w); \
     } \
     if (w->status == VM_IDLE) { \
         return 0; \
@@ -494,7 +553,7 @@ __attribute__((aligned(0x1000))) int h_switch_to##function_no(unsigned long trba
         dr &= 0xffff0ff0; \
         asm volatile ("mov %0, %%dr6"::"r"(dr)); \
         h_perf_tsc_end(H_PERF_TSC_BT, 0); \
-        g_pic_serve (w); \
+        if (!(h->gcpu.eflags & H_EFLAGS_TF)) g_pic_serve (w); \
         return 1; \
     } else if ((h->gcpu.intr&0xff)==0x0e) {\
         unsigned int fault; \
@@ -533,10 +592,10 @@ __attribute__((aligned(0x1000))) int h_switch_to##function_no(unsigned long trba
         w->status = VM_PAUSED; \
     } else if ((h->gcpu.intr&0xff)==0xef) {\
         time_up = 1; \
-        g_pic_serve (w); \
+        if (!(h->gcpu.eflags & H_EFLAGS_TF)) g_pic_serve (w); \
     } else {\
         V_LOG("Warning int %x not received by host.\n", h->gcpu.intr&0xff); \
-        g_pic_serve (w); \
+        if (!(h->gcpu.eflags & H_EFLAGS_TF)) g_pic_serve (w); \
     } \
     if ((h->gcpu.intr&0xff)>=0x20)    h_do_int(h->gcpu.intr&0xff); \
 \

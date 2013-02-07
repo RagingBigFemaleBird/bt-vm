@@ -77,6 +77,7 @@ g_pic_serve(struct v_world *w)
         w->gregs.dev.pic.d0IRQ_srv |= G_PIC_TIMER;
         w->gregs.has_errorc = 0;
         h_inject_int(w, w->gregs.dev.pic.d0IRQ + G_PIC_TIMER_INT);
+        h_perf_inc(H_PERF_TICK, 1);
         return;
     }
 }

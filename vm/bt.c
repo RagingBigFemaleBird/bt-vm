@@ -818,6 +818,7 @@ v_do_bp(struct v_world *world, unsigned long addr, unsigned int is_step)
             v_update_pb_cache(world, world->poi->addr, ip);
 #endif
             world->poi = NULL;
+            v_perf_inc(V_PERF_BT_P, 1);
         } else {
             V_VERBOSE("Step on: unnecessary function return breakpoints");
         }
@@ -978,7 +979,7 @@ _v_bt_cache(struct v_world *world, struct v_poi *poi, int depth,
             V_VERBOSE("Recursively do %lx", todo_poi[i]->addr);
             _v_bt_cache(world, todo_poi[i], depth + 1, cache, cache_count);
         }
-        if (todo_poi[i]->type & V_INST_PB) {
+/*        if (todo_poi[i]->type & V_INST_PB) {
             struct v_poi_pb_cache *find =
                 v_find_pb_cache(world, todo_poi[i]->addr);
             int k;
@@ -1002,6 +1003,7 @@ _v_bt_cache(struct v_world *world, struct v_poi *poi, int depth,
                 }
             }
         }
+*/
     }
 }
 
@@ -1021,7 +1023,7 @@ v_bt_cache(struct v_world *world)
             V_VERBOSE("(M)Recursively do %lx", save_poi[i]->addr);
             _v_bt_cache(world, save_poi[i], 0, cache, &cache_count);
         }
-        if (save_poi[i]->type & V_INST_PB) {
+/*        if (save_poi[i]->type & V_INST_PB) {
             struct v_poi_pb_cache *find =
                 v_find_pb_cache(world, save_poi[i]->addr);
             int k;
@@ -1044,6 +1046,7 @@ v_bt_cache(struct v_world *world)
                 }
             }
         }
+*/
     }
     h_bt_reset(world);
     for (i = 0; i < total; i++) {

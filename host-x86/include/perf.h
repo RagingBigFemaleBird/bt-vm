@@ -20,6 +20,7 @@
 
 /*I/O instructions*/
 #define H_PERF_IO 0
+#define H_PERF_TICK 1
 
 #define H_PERF_TSC_GUEST 0
 #define H_PERF_TSC_BT 1
@@ -31,7 +32,7 @@
 #define H_PERF_TSC_MINUS_FI 7
 #define H_PERF_TSC_TREE 8
 
-#define H_PERF_COUNT 1
+#define H_PERF_COUNT 2
 #define H_TSC_COUNT 9
 
 void h_perf_inc(int, long long);

@@ -34,6 +34,9 @@ h_step_on(struct v_world *world)
 {
     V_VERBOSE("(Step ON)");
     world->hregs.gcpu.eflags |= (H_EFLAGS_TF | H_EFLAGS_RF);
+#ifdef BT_CACHE
+    h_bt_squash_pb(world);
+#endif
 }
 
 void
