@@ -164,7 +164,7 @@ h_bt_cache_restore(struct v_world *world)
         h_pb_cache = (struct h_bt_pb_cache *) (cache + __PB_START);
         world->poi = h_pb_cache[pb_total - pb_set].poi;
         world->poi->expect = 1;
-        V_VERBOSE("BT resotre pb poi to %lx", world->poi->addr);
+        V_VERBOSE("BT restore pb poi to %lx", world->poi->addr);
         world->hregs.gcpu.dr7 &= 0xffffff00;
     }
     *((unsigned int *) (cache + __SET)) = 0;
@@ -239,6 +239,17 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
 }
 #endif
 
+/*    asm volatile ("mov %dr6, %ecx"); \
+    asm volatile ("test $0x4000, %ecx"); \
+    asm volatile ("jz 60f"); \
+    asm volatile ("mov %ss:52(%esp), %ecx"); \
+    asm volatile ("and $0xfffefeff, %ecx"); \
+    asm volatile ("mov %ecx, %ss:52(%esp)"); \
+    asm volatile ("mov %ss:96(%esp), %ecx"); \
+    asm volatile ("jmp 24f"); \
+    asm volatile ("60:"); \
+*/
+
 #ifdef BT_CACHE
 #define CACHE_BT_CACHE(function_no) \
     asm volatile ("9:"); \
@@ -275,13 +286,7 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
     asm volatile ("je 8b"); \
     asm volatile ("mov %dr6, %ecx"); \
     asm volatile ("test $0x4000, %ecx"); \
-    asm volatile ("jz 60f"); \
-    asm volatile ("mov %ss:104(%esp), %ecx"); /* 13 * 8 = eflags position */ \
-    asm volatile ("and $0xfffefeff, %ecx"); /* no TF & RF */ \
-    asm volatile ("mov %ecx, %ss:104(%esp)"); \
-    asm volatile ("mov %ss:96(%esp), %ecx"); /* assuming flat layout. fix if not */ \
-    asm volatile ("jmp 24f"); \
-    asm volatile ("60:"); \
+    asm volatile ("jnz 8b"); \
     asm volatile ("test $1, %ecx"); \
     asm volatile ("je 21f"); \
     asm volatile ("mov %dr0, %ecx"); \
@@ -350,9 +355,12 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
     asm volatile ("mov %dr7, %eax"); \
     asm volatile ("and $0xffffff00, %eax"); \
     asm volatile ("mov %eax, %dr7"); \
-    asm volatile ("mov %ss:104(%esp), %eax"); /* 13 * 8 = eflags position */ \
+    asm volatile ("mov %dr6, %eax"); \
+    asm volatile ("and $0xffff0ff0, %eax"); \
+    asm volatile ("mov %eax, %dr6"); \
+    asm volatile ("mov %ss:52(%esp), %eax"); /* 13 * 4 = eflags position */ \
     asm volatile ("or $0x10100, %eax"); /* TF | RF */ \
-    asm volatile ("mov %eax, %ss:104(%esp)"); \
+    asm volatile ("mov %eax, %ss:52(%esp)"); \
     asm volatile ("popa"); \
     asm volatile ("add $12, %esp"); \
     asm volatile ("iret"); \
