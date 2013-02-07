@@ -137,15 +137,16 @@ h_bt_cache_restore(struct v_world *world)
     set = *((unsigned int *) (cache + __SET));
     pb_total = *((unsigned int *) (cache + __PB_TOTAL));
     pb_set = *((unsigned int *) (cache + __PB_SET));
-    asm volatile ("mov %%dr0, %0":"=r"(dr7));
+    asm volatile ("mov %%dr0, %0":"=r" (dr7));
     V_VERBOSE("dr0 is %x", dr7);
-    asm volatile ("mov %%dr1, %0":"=r"(dr7));
+    asm volatile ("mov %%dr1, %0":"=r" (dr7));
     V_VERBOSE("dr1 is %x", dr7);
-    asm volatile ("mov %%dr2, %0":"=r"(dr7));
+    asm volatile ("mov %%dr2, %0":"=r" (dr7));
     V_VERBOSE("dr2 is %x", dr7);
-    asm volatile ("mov %%dr3, %0":"=r"(dr7));
+    asm volatile ("mov %%dr3, %0":"=r" (dr7));
     V_VERBOSE("dr3 is %x", dr7);
-    V_VERBOSE("Total %x set %x, pb Total %x set %x", total, set, pb_total, pb_set);
+    V_VERBOSE("Total %x set %x, pb Total %x set %x", total, set, pb_total,
+        pb_set);
     if (total != 0 && set != 0) {
         hcache = (struct h_bt_cache *) (cache + __CB_START);
         world->poi = hcache[total - set].poi;
@@ -208,7 +209,8 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
                     }
                     pb_cache[pb_total].addr = plan[i].plan->poi[j]->addr;
                     pb_cache[pb_total].poi = plan[i].plan->poi[j];
-                    V_VERBOSE("cache %x is %lx", pb_total, pb_cache[pb_total].addr);
+                    V_VERBOSE("cache %x is %lx", pb_total,
+                        pb_cache[pb_total].addr);
                     pb_total++;
                   found:
                     asm volatile ("nop");
@@ -238,17 +240,6 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
     *((unsigned int *) (cache + __PB_TOTAL)) = pb_total;
 }
 #endif
-
-/*    asm volatile ("mov %dr6, %ecx"); \
-    asm volatile ("test $0x4000, %ecx"); \
-    asm volatile ("jz 60f"); \
-    asm volatile ("mov %ss:52(%esp), %ecx"); \
-    asm volatile ("and $0xfffefeff, %ecx"); \
-    asm volatile ("mov %ecx, %ss:52(%esp)"); \
-    asm volatile ("mov %ss:96(%esp), %ecx"); \
-    asm volatile ("jmp 24f"); \
-    asm volatile ("60:"); \
-*/
 
 #ifdef BT_CACHE
 #define CACHE_BT_CACHE(function_no) \
@@ -286,7 +277,13 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
     asm volatile ("je 8b"); \
     asm volatile ("mov %dr6, %ecx"); \
     asm volatile ("test $0x4000, %ecx"); \
-    asm volatile ("jnz 8b"); \
+    asm volatile ("jz 60f"); \
+    asm volatile ("mov %ss:52(%esp), %ecx"); \
+    asm volatile ("and $0xfffefeff, %ecx"); \
+    asm volatile ("mov %ecx, %ss:52(%esp)"); \
+    asm volatile ("mov %ss:48(%esp), %ecx"); \
+    asm volatile ("jmp 24f"); \
+    asm volatile ("60:"); \
     asm volatile ("test $1, %ecx"); \
     asm volatile ("je 21f"); \
     asm volatile ("mov %dr0, %ecx"); \
