@@ -796,7 +796,7 @@ v_do_bp(struct v_world *world, unsigned long addr, unsigned int is_step)
             || (world->poi->type & V_INST_PB))
         && (ip == world->poi->addr)) {
         h_step_on(world);
-        v_perf_inc(V_PERF_BT_P, 1);
+        v_perf_inc(V_PERF_BT_PS, 1);
     } else {
         world->poi->expect = 0;
         if (world->poi->tree == NULL) {
@@ -808,6 +808,7 @@ v_do_bp(struct v_world *world, unsigned long addr, unsigned int is_step)
         h_perf_tsc_begin(1);
         v_poi_plan_bp(world, world->poi, H_DEBUG_MAX_BP);
         h_perf_tsc_end(H_PERF_TSC_PLAN, 1);
+        v_bt_cache(world);
     }
 }
 

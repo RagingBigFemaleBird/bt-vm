@@ -17,13 +17,14 @@
  */
 #include "host/include/mm.h"
 #include "vm/include/lru_cache.h"
+#include "vm/include/logging.h"
 #include <linux/mm.h>
 
+static int timestamp = 0;
 static inline unsigned int
 lru_stamp(void)
 {
-    extern int stepping;
-    return stepping;
+    return timestamp++;
 }
 
 struct lru_cache_entry *
@@ -37,7 +38,7 @@ lru_cache_find32(struct lru_cache *cache, unsigned int key32)
         if (((struct lru_cache_entry *) (body + unit_size * i))->key32 == key32) {
             ((struct lru_cache_entry *) (body + unit_size * i))->timestamp =
                 lru_stamp();
-            return &cache->body[i];
+            return ((struct lru_cache_entry *) (body + unit_size * i));
         }
     }
     return NULL;
@@ -53,6 +54,7 @@ lru_cache_update32(struct lru_cache *cache, unsigned int key32)
         cache->payload_size + sizeof(struct lru_cache_entry);
     ret = lru_cache_find32(cache, key32);
     if (ret != NULL) {
+        V_VERBOSE("Found cache");
         ret->frequency++;
         return ret;
     }
@@ -65,6 +67,7 @@ lru_cache_update32(struct lru_cache *cache, unsigned int key32)
             0;
         ((struct lru_cache_entry *) (body +
                 unit_size * cache->used))->frequency = 1;
+        V_VERBOSE("Used cache %x", cache->used);
         cache->used++;
         return (struct lru_cache_entry *) (body + unit_size * (cache->used -
                 1));
@@ -72,6 +75,7 @@ lru_cache_update32(struct lru_cache *cache, unsigned int key32)
     replace = 0;
     replace_ts = 0xffffffff;
     for (i = 0; i < cache->total; i++) {
+        V_VERBOSE("Timestamp for %x is %x", i, ((struct lru_cache_entry *) (body + unit_size * i))->timestamp);
         if (((struct lru_cache_entry *) (body + unit_size * i))->timestamp <
             replace_ts) {
             replace_ts =
@@ -79,6 +83,7 @@ lru_cache_update32(struct lru_cache *cache, unsigned int key32)
             replace = i;
         }
     }
+    V_VERBOSE("Replaced cache %x", replace);
     ((struct lru_cache_entry *) (body + unit_size * replace))->key32 = key32;
     ((struct lru_cache_entry *) (body + unit_size * replace))->timestamp =
         lru_stamp();

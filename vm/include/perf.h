@@ -30,8 +30,10 @@
 #define V_PERF_BT_F 4
 /*BT pointer branches*/
 #define V_PERF_BT_P 5
+/*BT pointer branches*/
+#define V_PERF_BT_PS 6
 
-#define V_PERF_COUNT 6
+#define V_PERF_COUNT 7
 void v_perf_inc(int, long);
 void v_perf_init(void);
 long v_perf_get(int);
