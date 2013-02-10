@@ -27,6 +27,8 @@
 #define VM_RUNNING 0
 #define ASSERT(x) if (!(x)) V_ERR("Assertion failure %s: %d", __FILE__, __LINE__);
 
+struct lru_cache;
+
 struct v_world {
     //every cpu status in the view of host machine
     struct h_regs hregs;
@@ -52,7 +54,7 @@ struct v_world {
     unsigned int status;
     unsigned int relocate;
 #ifdef BT_CACHE
-    struct v_poi_pb_cache *pb_cache;
+    struct lru_cache *pb_cache;
 #endif
 };
 

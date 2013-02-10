@@ -23,6 +23,7 @@
 #include "vm/include/world.h"
 #include "vm/include/logging.h"
 #include "host/include/cpu.h"
+#include "vm/include/lru_cache.h"
 
 /**
  *
@@ -88,7 +89,7 @@ v_create_world(unsigned long pages)
     world->poi = NULL;
     world->spt_list = NULL;
 #ifdef BT_CACHE
-    world->pb_cache = NULL;
+    world->pb_cache = lru_cache_init(32, 4);
 #endif
     h_init_int();
 

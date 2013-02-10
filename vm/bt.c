@@ -28,6 +28,7 @@
 #include "vm/include/see.h"
 #include "host/include/perf.h"
 #include "vm/include/world.h"
+#include "vm/include/lru_cache.h"
 
 /**
  * @in addr virtual address
@@ -707,70 +708,28 @@ v_poi_plan_bp(struct v_world *world, struct v_poi *poi, int bp_count)
 }
 
 #ifdef BT_CACHE
-struct v_poi_pb_cache *
-v_find_pb_cache(struct v_world *world, unsigned long branch)
-{
-    struct v_poi_pb_cache *head = world->pb_cache;
-    while (head != NULL) {
-        if (head->addr == branch)
-            break;
-        head = head->next;
-    }
-    return head;
-}
-
-struct v_poi_pb_cache *
-v_create_pb_cache(struct v_world *world, unsigned long branch)
-{
-    struct v_poi_pb_cache *head = h_raw_malloc(sizeof(struct v_poi_pb_cache));
-    head->next = world->pb_cache;
-    head->addr = branch;
-    head->total = 0;
-    world->pb_cache = head;
-    return head;
-}
 
 void
 v_update_pb_cache(struct v_world *world, unsigned long branch,
     unsigned long dest)
 {
-    struct v_poi_pb_cache *find = v_find_pb_cache(world, branch);
-    unsigned int i, lowest_idx = 0, lowest_freq = 0xffffffff;
-    if (find == NULL)
-        find = v_create_pb_cache(world, branch);
-    for (i = 0; i < find->total; i++) {
-        if (find->freq[i] < lowest_freq) {
-            lowest_idx = i;
-            lowest_freq = find->freq[i];
-        }
-        if (find->dest[i] == dest) {
-            find->freq[i]++;
-            return;
-        }
-    }
-    if (find->total < BT_CACHE_PB_COUNT) {
-        find->freq[find->total] = 1;
-        find->dest[find->total] = dest;
-        find->total++;
-        return;
-    }
-    find->freq[lowest_idx] = 1;
-    find->dest[lowest_idx] = dest;
+    struct lru_cache_entry *find = lru_cache_update32(world->pb_cache, branch);
+    void *payload = find->payload;
+    *(unsigned int *) payload = dest;
 }
 
 void
 v_dump_pb_cache(struct v_world *world)
 {
     int i;
-    struct v_poi_pb_cache *head = world->pb_cache;
-    while (head != NULL) {
-        V_ERR("Cache Entry for %lx---", head->addr);
-        for (i = 0; i < head->total; i++) {
-            V_ERR("---Dest %8x|Hits %8x---", head->dest[i], head->freq[i]);
-        }
-        head = head->next;
+    void *head = world->pb_cache->body;
+    for (i = 0; i < world->pb_cache->used; i++) {
+        struct lru_cache_entry *p =
+            head + i * (world->pb_cache->payload_size +
+            sizeof(struct lru_cache_entry));
+        void *payload = p->payload;
+        V_ERR("Cached PB %x dest %x", p->key32, *(unsigned int *) payload);
     }
-
 }
 #endif
 
@@ -815,7 +774,7 @@ v_do_bp(struct v_world *world, unsigned long addr, unsigned int is_step)
         h_step_off(world);
         if (!(ip == world->poi->addr)) {
 #ifdef BT_CACHE
-            //v_update_pb_cache(world, world->poi->addr, ip);
+            v_update_pb_cache(world, world->poi->addr, ip);
 #endif
             world->poi = NULL;
             v_perf_inc(V_PERF_BT_P, 1);
@@ -980,27 +939,21 @@ _v_bt_cache(struct v_world *world, struct v_poi *poi, int depth,
             _v_bt_cache(world, todo_poi[i], depth + 1, cache, cache_count);
         }
         if (todo_poi[i]->type & V_INST_PB) {
-            struct v_poi_pb_cache *find =
-                v_find_pb_cache(world, todo_poi[i]->addr);
-            int k;
-            if (find == NULL)
-                continue;
-            for (k = 0; k < find->total; k++) {
-                if (find->freq[k] >= 2) {
-                    unsigned long possible_ip = find->dest[k];
-                    unsigned long phys = g_v2p(world, possible_ip, 1);
-                    struct v_page *mpage = h_p2mp(world, phys);
-                    struct v_poi *possible_poi;
-                    if (mpage == NULL)
-                        continue;
-                    possible_poi = v_find_poi(mpage, possible_ip);
-                    if (possible_poi == NULL)
-                        continue;
-                    V_VERBOSE("Found poi %lx for %lx", possible_poi->addr,
-                        todo_poi[i]->addr);
-                    _v_bt_cache(world, possible_poi, depth + 1, cache,
-                        cache_count);
-                }
+            struct lru_cache_entry *find =
+                lru_cache_find32(world->pb_cache, todo_poi[i]->addr);
+            if (find != NULL) {
+                unsigned long possible_ip = *(unsigned int *) find->payload;
+                unsigned long phys = g_v2p(world, possible_ip, 1);
+                struct v_page *mpage = h_p2mp(world, phys);
+                struct v_poi *possible_poi;
+                if (mpage == NULL)
+                    continue;
+                possible_poi = v_find_poi(mpage, possible_ip);
+                if (possible_poi == NULL)
+                    continue;
+                V_VERBOSE("Found poi %lx for %lx", possible_poi->addr,
+                    todo_poi[i]->addr);
+                _v_bt_cache(world, possible_poi, depth + 1, cache, cache_count);
             }
         }
     }
@@ -1023,26 +976,21 @@ v_bt_cache(struct v_world *world)
             _v_bt_cache(world, save_poi[i], 0, cache, &cache_count);
         }
         if (save_poi[i]->type & V_INST_PB) {
-            struct v_poi_pb_cache *find =
-                v_find_pb_cache(world, save_poi[i]->addr);
-            int k;
-            if (find == NULL)
-                continue;
-            for (k = 0; k < find->total; k++) {
-                if (find->freq[k] >= 2) {
-                    unsigned long possible_ip = find->dest[k];
-                    unsigned long phys = g_v2p(world, possible_ip, 1);
-                    struct v_page *mpage = h_p2mp(world, phys);
-                    struct v_poi *possible_poi;
-                    if (mpage == NULL)
-                        continue;
-                    possible_poi = v_find_poi(mpage, possible_ip);
-                    if (possible_poi == NULL)
-                        continue;
-                    V_VERBOSE("Found poi %lx for %lx", possible_poi->addr,
-                        save_poi[i]->addr);
-                    _v_bt_cache(world, possible_poi, 0, cache, &cache_count);
-                }
+            struct lru_cache_entry *find =
+                lru_cache_find32(world->pb_cache, save_poi[i]->addr);
+            if (find != NULL) {
+                unsigned long possible_ip = *(unsigned int *) find->payload;
+                unsigned long phys = g_v2p(world, possible_ip, 1);
+                struct v_page *mpage = h_p2mp(world, phys);
+                struct v_poi *possible_poi;
+                if (mpage == NULL)
+                    continue;
+                possible_poi = v_find_poi(mpage, possible_ip);
+                if (possible_poi == NULL)
+                    continue;
+                V_VERBOSE("Found poi %lx for %lx", possible_poi->addr,
+                    save_poi[i]->addr);
+                _v_bt_cache(world, possible_poi, 0, cache, &cache_count);
             }
         }
     }

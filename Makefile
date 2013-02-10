@@ -1,6 +1,6 @@
 EXTRA_CFLAGS += -I $(PWD)
 obj-m += btc.o
-btc-objs := loader.o host/mm.o host/cpu.o vm/world.o host/world.o guest/world.o vm/mm.o guest/mm.o guest/cpu.o host/interrupt.o host/bt.o vm/bt.o guest/bt.o vm/see.o vm/perf.o host/perf.o guest/perf.o guest/seed.o
+btc-objs := loader.o host/mm.o host/cpu.o vm/world.o host/world.o guest/world.o vm/mm.o vm/lru_cache.o guest/mm.o guest/cpu.o host/interrupt.o host/bt.o vm/bt.o guest/bt.o vm/see.o vm/perf.o host/perf.o guest/perf.o guest/seed.o
 ifeq (${ARCH}, x86)
 	btc-objs += guest/dev/fb.o guest/dev/pic.o guest/dev/fdc.o guest/dev/dma.o guest/dev/kb.o
 	C_OPTION += -C /lib/modules/$(shell uname -r)/build

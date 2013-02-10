@@ -48,14 +48,6 @@ struct v_poi_cached_tree_plan {
     struct v_poi_tree_plan *plan;
 };
 
-struct v_poi_pb_cache {
-    struct v_poi_pb_cache *next;
-    unsigned long addr;
-    unsigned total;
-    unsigned int dest[BT_CACHE_PB_COUNT];
-    unsigned int freq[BT_CACHE_PB_COUNT];
-};
-
 struct v_poi {
     unsigned int type;
     unsigned int ex_mode;
