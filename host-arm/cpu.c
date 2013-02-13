@@ -190,6 +190,11 @@ h_flush_tlb_all(void)
     asm volatile ("dsb");
 }
 
+void
+h_bt_cache(struct v_world *world , struct v_poi_cached_tree_plan *cache, int count)
+{
+}
+
 #ifdef USERMODE_DEBUG
 
 static int usermode_debug = 0;
@@ -1130,6 +1135,7 @@ h_do_fail_inst(struct v_world *world, unsigned long ip)
                 }
                 break;
             case 7:
+                flush_cache_all();
                 //cache op
                 if (crm == 0x0e && opc1 == 0 && opc2 == 2) {
                     goto processed;
@@ -1146,6 +1152,7 @@ h_do_fail_inst(struct v_world *world, unsigned long ip)
                 goto processed;
                 break;
             case 8:
+                flush_cache_all();
                 //cache op
                 if (crm == 0x7 && opc1 == 0 && opc2 == 0) {
                     goto processed;
@@ -1174,5 +1181,4 @@ h_do_fail_inst(struct v_world *world, unsigned long ip)
     }
   processed:
     world->hregs.gcpu.pc += 4;
-    flush_cache_all();
 }
