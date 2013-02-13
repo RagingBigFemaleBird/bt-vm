@@ -191,7 +191,7 @@ btc_work_func(struct work_struct *work)
             w_list = v_relocate_world(curr);    /* do this properly */
             curr->relocate = 0;
         }
-        V_LOG("Stepping %x: %p", stepping++, w_list);
+        V_LOG("Stepping %x: %p status %x", stepping++, w_list, w_list->status);
         poke++;
         time_up = 0;
         h_int_prepare();

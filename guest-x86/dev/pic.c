@@ -67,12 +67,12 @@ g_pic_serve(struct v_world *w)
     if (w->gregs.dev.pic.expected_jiffies + 0x2000000LL > h_perf_tsc_read()) {
         return;
     }
+    w->status = VM_RUNNING;
     if (w->gregs.mode != G_MODE_REAL /* note: hack */  &&
         v_int_enabled(w) && (!(w->gregs.dev.pic.d0IRQ_mask & G_PIC_TIMER))
         /*&& (w->gregs.dev.pic.d0IRQ_req & G_PIC_TIMER) */
         && (!(w->gregs.dev.pic.d0IRQ_srv))) {
         V_EVENT("trigger timer interrupt");
-        w->status = VM_RUNNING;
         w->gregs.dev.pic.expected_jiffies = h_perf_tsc_read();
         w->gregs.dev.pic.d0IRQ_srv |= G_PIC_TIMER;
         w->gregs.has_errorc = 0;

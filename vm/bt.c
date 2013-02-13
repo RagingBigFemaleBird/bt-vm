@@ -808,7 +808,9 @@ v_do_bp(struct v_world *world, unsigned long addr, unsigned int is_step)
         h_perf_tsc_begin(1);
         v_poi_plan_bp(world, world->poi, H_DEBUG_MAX_BP);
         h_perf_tsc_end(H_PERF_TSC_PLAN, 1);
+#ifdef BT_CACHE
         v_bt_cache(world);
+#endif
     }
 }
 

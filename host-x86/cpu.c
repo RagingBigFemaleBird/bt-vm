@@ -32,7 +32,7 @@
 #include "host/include/perf.h"
 #include "guest/include/bt.h"
 
-#define DEBUG_CODECONTROL
+//#define DEBUG_CODECONTROL
 
 extern volatile int step;
 extern volatile int time_up;
@@ -103,8 +103,8 @@ h_cpu_save(struct v_world *w)
     asm volatile ("pop %0":"=r" (h->hcpu.ss));
     asm volatile ("pushf");
     asm volatile ("pop %0":"=r" (h->hcpu.eflags));
-    if (!bp_reached)
-        h_set_bp(w, bpaddr, 3);
+/*    if (!bp_reached)
+        h_set_bp(w, bpaddr, 3);*/
 }
 
 #ifdef BT_CACHE
@@ -394,7 +394,7 @@ __attribute__((aligned(0x1000))) int h_switch_to##function_no(unsigned long trba
     if (w->status == VM_IDLE) { \
         return 0; \
     } \
-        h_perf_tsc_begin(0);\
+    h_perf_tsc_begin(0);\
     if (h->fpusaved) { \
         asm volatile ("clts"); \
     } else { \
