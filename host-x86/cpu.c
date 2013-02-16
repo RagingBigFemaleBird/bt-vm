@@ -32,7 +32,7 @@
 #include "host/include/perf.h"
 #include "guest/include/bt.h"
 
-//#define DEBUG_CODECONTROL
+#define DEBUG_CODECONTROL
 
 extern volatile int step;
 extern volatile int time_up;
@@ -156,7 +156,7 @@ h_bt_cache_restore(struct v_world *world)
         dr7 = world->hregs.gcpu.dr7 & 0xffffff00;
         for (set = 0; set < world->poi->plan.count; set++) {
             unsigned int *bpreg = &world->hregs.gcpu.dr0;
-            dr7 |= (0x300 | (2 << (set * 2)));
+            dr7 |= (0x700 | (3 << (set * 2)));
             world->bp_to_poi[set] = world->poi->plan.poi[set];
             bpreg[set] = world->bp_to_poi[set]->addr;
         }
@@ -197,7 +197,7 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
             hcache[i].dr7 = world->hregs.gcpu.dr7 & (0xffffff00);
             for (j = 0; j < plan[i].plan->count; j++) {
                 unsigned int *bp = &hcache[i].dr0;
-                hcache[i].dr7 |= (0x300 | (2 << (j * 2)));
+                hcache[i].dr7 |= (0x700 | (2 << (j * 2)));
                 *(bp + j) = plan[i].plan->poi[j]->addr;
                 if ((plan[i].plan->poi[j]->type & V_INST_PB)
                     && pb_total <= 2 * BT_CACHE_CAPACITY) {
@@ -405,6 +405,7 @@ __attribute__((aligned(0x1000))) int h_switch_to##function_no(unsigned long trba
     asm ("movl %0, %%dr1"::"r"(w->hregs.gcpu.dr1)); \
     asm ("movl %0, %%dr2"::"r"(w->hregs.gcpu.dr2)); \
     asm ("movl %0, %%dr3"::"r"(w->hregs.gcpu.dr3)); \
+    asm ("movl %0, %%dr6"::"r"(0xffff0ff0)); \
     { \
         void *gdt = (void*)(h->gcpu.gdt.base); \
         unsigned int *c; \
@@ -528,6 +529,9 @@ __attribute__((aligned(0x1000))) int h_switch_to##function_no(unsigned long trba
     V_EVENT("cs:eip = %x:%x \t", h->gcpu.cs, h->gcpu.eip); \
     V_LOG("%s %s %s IOPL%x RING%x ds:%x, es:%x, ss:%x, esp:%x, cs:%x, eip:%x, eflags:%x, eax:%x, ebx:%x, ecx:%x, edx:%x, esi:%x, edi:%x, ebp:%x, errorcode:%x, save_esp:%x, tr:%x, intr:%x, v86ds:%x, v86es:%x, cstrue:%x, dstrue:%x, estrue:%x, sstrue:%x, trbase: %x, spt: %lx\n", w->gregs.mode==G_MODE_REAL?"RM":(g_get_current_ex_mode(w)==G_EX_MODE_32?"32":"16"), v_int_enabled(w)?"IE":"--", w->gregs.nt?"NT":"--", w->gregs.iopl, w->gregs.ring, h->gcpu.ds, h->gcpu.es, h->gcpu.ss, h->gcpu.esp, h->gcpu.cs, h->gcpu.eip, h->gcpu.eflags, h->gcpu.eax, h->gcpu.ebx, h->gcpu.ecx, h->gcpu.edx, h->gcpu.esi, h->gcpu.edi, h->gcpu.ebp, h->gcpu.errorc, h->gcpu.save_esp, h->gcpu.tr, h->gcpu.intr, h->gcpu.v86ds, h->gcpu.v86es, w->gregs.cstrue, w->gregs.dstrue, w->gregs.estrue, w->gregs.sstrue, w->gregs.cr3, w->htrbase); \
     CACHE_BT_RESTORE \
+    /* fix up the stupid RF flag */ \
+    if (w->gregs.rf) h->gcpu.eflags |= H_EFLAGS_RF; \
+    else h->gcpu.eflags &= (~H_EFLAGS_RF); \
     if (w->poi && w->poi->expect && (h->gcpu.intr&0xff)<0x20 && (h->gcpu.intr&0xff)!=0x0e && (h->gcpu.intr&0xff)!=0x01 && w->poi->addr == g_get_ip(w)) { \
         V_ALERT("POI ip == ip but not taking BP?"); \
     } \
@@ -1017,8 +1021,8 @@ h_load_from_tr(struct v_world *world, unsigned int trword1,
         (world, &world->hregs.gcpu.ss, world->gregs.sstrue, 0,
             &world->gregs.ss, 1))
         return 1;
-    world->hregs.gcpu.eflags =
-        (world->gregs.eflags & 0x3f0cd7) | (H_EFLAGS_IF | H_EFLAGS_RESERVED);
+    world->hregs.gcpu.eflags = (world->hregs.gcpu.eflags & H_EFLAGS_RF) |
+        (world->gregs.eflags & 0x3e0cd7) | (H_EFLAGS_IF | H_EFLAGS_RESERVED);
     V_LOG("new eflags = %x", world->gregs.eflags);
     if (world->hregs.gcpu.eflags & H_EFLAGS_VM) {
         V_LOG("V86 mode, nyi");
@@ -1219,7 +1223,9 @@ h_do_return(struct v_world *world, int para_count, int is_iret)
 #endif
             world->gregs.eflags = eflags;
             world->hregs.gcpu.eflags =
-                (eflags & 0x3f0cd7) | (H_EFLAGS_IF | H_EFLAGS_RESERVED);
+                (world->hregs.
+                gcpu.eflags & H_EFLAGS_RF) | (eflags & 0x3e0cd7) | (H_EFLAGS_IF
+                | H_EFLAGS_RESERVED);
             if (world->hregs.gcpu.eflags & H_EFLAGS_VM) {
                 V_LOG("V86mode, nyi");
                 world->status = VM_PAUSED;
@@ -1367,6 +1373,12 @@ h_inject_int(struct v_world *world, unsigned int int_no)
             sp -= 8;
         }
         eflags = world->hregs.gcpu.eflags;
+#ifdef DEBUG_CODECONTROL
+        if (eflags & H_EFLAGS_TF) {
+            V_ERR("Wrong time to inject interrupts!!!");
+            world->status = VM_PAUSED;
+        }
+#endif
         eflags &= 0x40cd7;
         if (v_int_enabled(world))
             eflags |= H_EFLAGS_IF;
@@ -1569,7 +1581,8 @@ h_gpfault(struct v_world *world)
         v_enable_int(world);
         world->gregs.eflags |= (H_EFLAGS_IF);
         world->hregs.gcpu.eip++;
-        g_pic_serve(world);
+        if (!(world->hregs.gcpu.eflags & H_EFLAGS_TF))
+            g_pic_serve(world);
         break;
     case 0xcd:
         V_ALERT("INT:%x, %d(%x), %d(%x), %d(%x), %d(%x)",
@@ -2017,7 +2030,7 @@ h_gpfault(struct v_world *world)
             int reg = (unsigned int) (*(inst + 2)) & 0xf;
             int cr = (unsigned int) (*(inst + 2)) & 0xf0;
             unsigned int *target = &world->hregs.gcpu.eax;
-            V_EVENT("MOV into CR from reg %x", reg);
+            V_EVENT("MOV into CR %x from reg %x", cr, reg);
             if (0 != world->gregs.ring) {
                 world->gregs.has_errorc = 1;
                 world->gregs.errorc = 0;
@@ -2421,7 +2434,9 @@ h_gpfault(struct v_world *world)
                 world->hregs.gcpu.eip++;
             }
             world->hregs.gcpu.eflags =
-                (eflags & 0x3f0cd7) | (H_EFLAGS_IF | H_EFLAGS_RESERVED);
+                (world->hregs.
+                gcpu.eflags & H_EFLAGS_RF) | (eflags & 0x3e0cd7) | (H_EFLAGS_IF
+                | H_EFLAGS_RESERVED);
             V_LOG("new eflags = %x", eflags);
             if (world->gregs.ring == 0) {
                 if (eflags & H_EFLAGS_IF)

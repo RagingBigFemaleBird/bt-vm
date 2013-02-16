@@ -34,6 +34,8 @@ h_step_on(struct v_world *world)
 {
     V_VERBOSE("(Step ON)");
     world->hregs.gcpu.eflags |= (H_EFLAGS_TF | H_EFLAGS_RF);
+    world->hregs.gcpu.dr7 &= (0xffffff00);
+    world->gregs.rf = 1;
 #ifdef BT_CACHE
     h_bt_squash_pb(world);
 #endif
@@ -43,6 +45,7 @@ void
 h_step_off(struct v_world *world)
 {
     V_VERBOSE("(Step OFF)");
+    world->gregs.rf = 0;
     world->hregs.gcpu.eflags &= (~H_EFLAGS_TF);
 }
 
@@ -50,7 +53,7 @@ void
 h_set_bp(struct v_world *world, h_addr_t addr, unsigned int bp_number)
 {
     world->hregs.gcpu.eflags &= (~H_EFLAGS_RF);
-    world->hregs.gcpu.dr7 |= (0x300 | (2 << (bp_number * 2)));
+    world->hregs.gcpu.dr7 |= (0x700 | (3 << (bp_number * 2)));
     V_VERBOSE("dr7 %x", world->hregs.gcpu.dr7);
     switch (bp_number) {
     case 0:
@@ -78,8 +81,5 @@ h_clear_bp(struct v_world *world, unsigned int bp_number)
 void
 h_bt_reset(struct v_world *world)
 {
-    int i;
-    for (i = 0; i < H_DEBUG_MAX_BP; i++) {
-        h_clear_bp(world, i);
-    }
+    world->hregs.gcpu.dr7 &= (0xffffff00);
 }

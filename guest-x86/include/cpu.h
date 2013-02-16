@@ -142,6 +142,7 @@ struct g_regs {
     unsigned int ring;
     unsigned int iopl;
     unsigned int nt;
+    unsigned int rf;
     unsigned int eflags_real;
     unsigned int has_errorc;
     unsigned int disasm_ip;     //bt use

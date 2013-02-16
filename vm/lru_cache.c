@@ -75,7 +75,8 @@ lru_cache_update32(struct lru_cache *cache, unsigned int key32)
     replace = 0;
     replace_ts = 0xffffffff;
     for (i = 0; i < cache->total; i++) {
-        V_VERBOSE("Timestamp for %x is %x", i, ((struct lru_cache_entry *) (body + unit_size * i))->timestamp);
+        V_VERBOSE("Timestamp for %x is %x", i,
+            ((struct lru_cache_entry *) (body + unit_size * i))->timestamp);
         if (((struct lru_cache_entry *) (body + unit_size * i))->timestamp <
             replace_ts) {
             replace_ts =

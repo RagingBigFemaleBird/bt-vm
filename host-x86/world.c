@@ -112,6 +112,7 @@ h_world_init(struct v_world *world)
     asm volatile ("pushf");
     asm volatile ("pop %0":"=r" (eflags));
     eflags = H_EFLAGS_VM | H_EFLAGS_IF;
+    eflags &= (~H_EFLAGS_RF);
     h->gcpu.eax = h->gcpu.ebx = h->gcpu.ecx =
         h->gcpu.edx = h->gcpu.esi = h->gcpu.edi = h->gcpu.ebp =
         h->gcpu.errorc = h->gcpu.save_esp = h->gcpu.intr = 0xdeadbeef;
@@ -145,7 +146,7 @@ h_world_init(struct v_world *world)
     world->hregs.gcpu.trsave.ss0 = 0x7f8;
     world->hregs.gcpu.trsave.esp0 = (unsigned int) (&world->hregs.gcpu.cpuid0);
     world->hregs.gcpu.trsave.iomap = sizeof(struct h_tr_table) + 1;
-    world->hregs.gcpu.dr7 = 0;
+    world->hregs.gcpu.dr7 = 0x700;
 
     table = h_raw_palloc(0);
     world->hregs.fpu = h_allocv(table->phys);
