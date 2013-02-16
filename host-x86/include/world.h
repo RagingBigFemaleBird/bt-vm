@@ -20,8 +20,8 @@
 #include "host/include/cpu.h"
 #include "guest/include/cpu.h"
 
-#define H_DEBUG_MAX_BP 4
-#define h_debug_bp_count() 4
+#define H_DEBUG_MAX_BP 3
+#define h_debug_bp_count() 3
 
 struct v_world;
 
