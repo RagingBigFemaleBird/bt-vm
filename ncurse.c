@@ -51,7 +51,8 @@ int step = 0;
 #define BTC_STEP _IO(BTC_IOC_MAGIC, 2)
 #define BTC_BP  _IOW(BTC_IOC_MAGIC, 3, unsigned int)
 #define BTC_KEYIN _IOW(BTC_IOC_MAGIC, 4, unsigned int)
-#define BTC_IOC_MAXNR 3
+#define BTC_UMOUNT _IOW(BTC_IOC_MAGIC, 5, unsigned int)
+#define BTC_IOC_MAXNR 5
 
 void
 menu(void)
@@ -69,6 +70,10 @@ menu(void)
         cbreak();
         c = getch();
         switch (c) {
+        case 'u':
+        case 'U':
+            ioctl(fileno(f), BTC_UMOUNT, 0);
+            return;
         case 'r':
         case 'R':
             ioctl(fileno(f), BTC_STATUS, 1);

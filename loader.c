@@ -50,7 +50,8 @@
 #define BTC_STEP _IO(BTC_IOC_MAGIC, 2)
 #define BTC_BP  _IOW(BTC_IOC_MAGIC, 3, unsigned int)
 #define BTC_KEYIN _IOW(BTC_IOC_MAGIC, 4, unsigned int)
-#define BTC_IOC_MAXNR 4
+#define BTC_UMOUNT _IOW(BTC_IOC_MAGIC, 5, unsigned int)
+#define BTC_IOC_MAXNR 5
 
 static struct v_world *w_list;
 static struct timer_list my_timer;
@@ -346,6 +347,12 @@ btc_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
     case BTC_KEYIN:
         V_ERR("Keyboard input %lx", arg);
         g_inject_key(curr, arg);
+        ret = 0;
+        break;
+
+    case BTC_UMOUNT:
+        g_disk_data = NULL;
+        g_disk_length = 0;
         ret = 0;
         break;
 
