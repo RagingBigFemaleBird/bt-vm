@@ -26,6 +26,8 @@
 #include "guest/include/mm.h"
 #include "vm/include/logging.h"
 #include "host/include/bt.h"
+#include "vm/include/perf.h"
+#include "host/include/perf.h"
 #include <../arch/arm/include/asm/cacheflush.h>
 
 extern volatile int step;
@@ -343,6 +345,7 @@ h_switch_to##function_no(unsigned long trbase, struct v_world *w) \
      /*DFSR*/ asm volatile ("mrc p15, 0, %0, c5, c0, 0":"=r" (dfsr)); \
     asm volatile ("mcr p15, 0, %0, c1, c0, 0"::"r" (hostcpu.p15_ctrl)); \
     local_irq_restore(i); \
+    v_perf_inc(V_PERF_WS, 1); \
     V_LOG("breakpoints %x %x", w->hregs.gcpu.bcr[0], w->hregs.gcpu.bvr[0]); \
     V_VERBOSE("saved banked regs: %x %x %x %x %x %x %x %x", h->hcpu.r13_fiq, \
         h->hcpu.r14_fiq, h->hcpu.r13_irq, h->hcpu.r14_irq, \
@@ -375,12 +378,14 @@ h_switch_to##function_no(unsigned long trbase, struct v_world *w) \
                 if (h_get_bp(w, hostcpu.number_of_breakpoints) != g_get_ip(w) \
                     && (w->hregs.gcpu.bcr[hostcpu.number_of_breakpoints] & 1)) { \
                     bp_hit = 1; \
+                    v_perf_inc(V_PERF_BT, 1); \
                     v_do_bp(w, g_get_ip(w), 1); \
                 } else { \
                     for (i = 0; i < hostcpu.number_of_breakpoints; i++) { \
                         if (h_get_bp(w, i) == g_get_ip(w)) { \
                             bp_hit = 1; \
                             V_EVENT("Breakpoint %x hit at %x", i, g_get_ip(w)); \
+                            v_perf_inc(V_PERF_BT, 1); \
                             v_do_bp(w, g_get_ip(w), 0); \
                             break; \
                         } \
@@ -397,6 +402,7 @@ h_switch_to##function_no(unsigned long trbase, struct v_world *w) \
  \
         if (!bp_hit) { \
             /*          v_perf_inc(V_PERF_PF, 1);*/ \
+            v_perf_inc(V_PERF_PF, 1); \
             if ((fault = v_pagefault(w, address, fault)) != V_MM_FAULT_HANDLED) { \
                 V_ERR("Guest injection of page fault %x, %x, %x, %x", dfar, \
                     ifar, dfsr, ifsr); \
@@ -411,6 +417,7 @@ h_switch_to##function_no(unsigned long trbase, struct v_world *w) \
 /*              return 1;*/\
     } else if (h->gcpu.reason == 1) { \
         if (g_in_priv(w) || (w->gregs.cpsr & G_PRIV_MASK) == G_PRIV_RST) { \
+            v_perf_inc(V_PERF_PI, 1); \
             h_do_fail_inst(w, g_get_ip(w)); \
         } else { \
             w->status = VM_PAUSED; \
@@ -1135,6 +1142,7 @@ h_do_fail_inst(struct v_world *world, unsigned long ip)
                 }
                 break;
             case 7:
+                h_perf_inc(H_PERF_CACHE, 1);
                 flush_cache_all();
                 //cache op
                 if (crm == 0x0e && opc1 == 0 && opc2 == 2) {
@@ -1152,6 +1160,7 @@ h_do_fail_inst(struct v_world *world, unsigned long ip)
                 goto processed;
                 break;
             case 8:
+                h_perf_inc(H_PERF_TLB, 1);
                 flush_cache_all();
                 //cache op
                 if (crm == 0x7 && opc1 == 0 && opc2 == 0) {
