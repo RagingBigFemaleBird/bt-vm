@@ -353,6 +353,7 @@ btc_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
     case BTC_UMOUNT:
         g_disk_data = NULL;
         g_disk_length = 0;
+        len = 0;
         ret = 0;
         break;
 

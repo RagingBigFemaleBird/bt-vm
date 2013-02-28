@@ -90,6 +90,8 @@ static struct g_kb_scancode scancode[] = {
     {'\n', 0x1c, 0, 0, 0},
     {0x107, 0xe, 0, 0, 0},      /* backspace */
     {' ', 0x39, 0, 0, 0},
+    {'.', 0x34, 0, 0, 0},
+    {',', 0x33, 0, 0, 0},
 };
 
 static unsigned int
