@@ -1300,6 +1300,14 @@ h_do_return(struct v_world *world, int para_count, int is_iret)
 
 }
 
+#define USERMODE_TESTS
+
+#ifdef USERMODE_TESTS
+
+int usermode_tests_reset = 1;
+
+#endif
+
 void
 h_inject_int(struct v_world *world, unsigned int int_no)
 {
@@ -1310,6 +1318,12 @@ h_inject_int(struct v_world *world, unsigned int int_no)
     unsigned long ip = g_get_ip(world);
     int igate = 0;
     V_ALERT("injecting interrupt %x", int_no);
+#ifdef USERMODE_TESTS
+    if (int_no == 0x80 && world->hregs.gcpu.eax == 24 && usermode_tests_reset) {
+        v_perf_init();
+        usermode_tests_reset = 0;
+    }
+#endif 
     if (int_no == 0x0d) {
         V_ALERT("injecting GP");
         world->status = VM_PAUSED;
