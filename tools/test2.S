@@ -24,7 +24,7 @@ _start:
 
 //    mov     $24, %eax
 //    int     $0x80
-    mov     $1000000, %ecx
+    mov     $10000, %ecx
     1:
     mov     $24, %eax
     int     $0x80

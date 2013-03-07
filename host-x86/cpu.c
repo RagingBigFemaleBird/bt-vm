@@ -1322,6 +1322,7 @@ h_inject_int(struct v_world *world, unsigned int int_no)
     if (int_no == 0x80 && world->hregs.gcpu.eax == 24 && usermode_tests_reset) {
         v_perf_init();
         usermode_tests_reset = 0;
+        V_ERR("Usermode test reset counters!");
     }
 #endif 
     if (int_no == 0x0d) {
