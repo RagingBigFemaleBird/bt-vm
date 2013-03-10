@@ -278,7 +278,7 @@ void
 h_fault_bridge_pages(struct v_world *w, h_addr_t virt)
 {
     virt = virt & H_PFN_MASK;
-    if (virt == ((unsigned int) (w->npage) & H_PFN_MASK)) {
+    if (virt == ((unsigned int) (w->hregs.hcpu.switcher) & H_PFN_MASK)) {
         h_relocate_npage(w);
         return;
     }
@@ -300,7 +300,7 @@ unsigned int
 h_check_bridge_pages(struct v_world *w, h_addr_t virt)
 {
     virt = virt & H_PFN_MASK;
-    if (virt == ((h_addr_t) (w->npage) & H_PFN_MASK)) {
+    if (virt == ((h_addr_t) (w->hregs.hcpu.switcher) & H_PFN_MASK)) {
         return 1;
     }
     if (virt == ((h_addr_t) (w->hregs.gcpu.gdt.base) & H_PFN_MASK)) {

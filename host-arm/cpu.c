@@ -193,7 +193,8 @@ h_flush_tlb_all(void)
 }
 
 void
-h_bt_cache(struct v_world *world , struct v_poi_cached_tree_plan *cache, int count)
+h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *cache,
+    int count)
 {
 }
 

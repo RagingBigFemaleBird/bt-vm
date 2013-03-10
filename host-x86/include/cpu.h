@@ -50,6 +50,7 @@
 #define H_CR0_TS	(1 << 3)
 
 struct h_regs;
+struct v_world;
 
 struct h_desc_table {
     unsigned short limit;
@@ -137,6 +138,8 @@ struct h_cpu {
     unsigned int dr2;
     unsigned int dr3;
     unsigned int dr7;
+    void (*switcher) (unsigned long trbase, struct v_world * w);
+    unsigned int page_fault_addr;
 
 } __attribute__ ((__packed__));
 
@@ -144,10 +147,7 @@ int h_cpu_init(void);
 
 struct v_world;
 /*world switch function */
-int h_switch_to1(unsigned long, struct v_world *);
-int h_switch_to2(unsigned long, struct v_world *);
-int h_switch_to3(unsigned long, struct v_world *);
-int h_switch_to4(unsigned long, struct v_world *);
+int h_switch_to(unsigned long, struct v_world *);
 void h_cpu_save(struct v_world *);
 void h_delete_trbase(struct v_world *);
 void h_new_trbase(struct v_world *);

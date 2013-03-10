@@ -22,10 +22,8 @@
 #include "host/include/cpu.h"
 
 extern struct h_cpu hostcpu;
-extern void trap_start4(void);
-extern void trap_start3(void);
-extern void trap_start2(void);
-extern void trap_start1(void);
+extern void trap_start(void);
+extern void h_switcher(unsigned long trbase, struct v_world *w);
 
 void
 h_world_init(struct v_world *world)
@@ -36,26 +34,23 @@ h_world_init(struct v_world *world)
     void *old = (void *) hostcpu.gdt.base;
     void *new;
     unsigned int eflags;
-    void (*trap) (void) = trap_start2;
+    void (*trap) (void) = trap_start;
     unsigned int *intr;
     int i;
     unsigned int traddr;
     struct h_regs *h = &world->hregs;
 
-    world->npage = h_switch_to2;
-
+    world->npage = h_switch_to;
+    world->hregs.hcpu.switcher = h_switcher;
     h_pin(h_v2p((h_addr_t) world));
-    h_pin(h_v2p((h_addr_t) h_switch_to1));
-    h_pin(h_v2p((h_addr_t) h_switch_to2));
-    h_pin(h_v2p((h_addr_t) h_switch_to3));
-    h_pin(h_v2p((h_addr_t) h_switch_to4));
 
     h_set_map(world->htrbase, (long unsigned int) world,
         h_v2p((unsigned int) world), 1, V_PAGE_W | V_PAGE_VM);
     V_ERR("world data at %p, ", world);
-    h_set_map(world->htrbase, (long unsigned int) world->npage,
-        h_v2p((unsigned int) world->npage), 1, V_PAGE_W | V_PAGE_VM);
-    V_ERR("neutral page at %p\n", world->npage);
+    h_set_map(world->htrbase, (long unsigned int) world->hregs.hcpu.switcher,
+        h_v2p((unsigned int) world->hregs.hcpu.switcher), 1,
+        V_PAGE_W | V_PAGE_VM);
+    V_ERR("neutral page at %p\n", world->hregs.hcpu.switcher);
 
     world->hregs.gcpu.idt.base = (unsigned int) va;
     world->hregs.gcpu.idt.limit = 0x7ff;
@@ -148,6 +143,8 @@ h_world_init(struct v_world *world)
     world->hregs.gcpu.trsave.iomap = sizeof(struct h_tr_table) + 1;
     world->hregs.gcpu.dr7 = 0x700;
 
+    world->hregs.hcpu.switcher = h_switcher;
+
     table = h_raw_palloc(0);
     world->hregs.fpu = h_allocv(table->phys);
     asm volatile ("fxsave (%0)"::"r" (world->hregs.fpu + 512));
@@ -166,43 +163,36 @@ void
 h_relocate_npage(struct v_world *w)
 {
     struct v_spt_info *spt = w->spt_list;
-    unsigned int oldnp = (unsigned int) (w->npage);
+    unsigned int oldnp = (unsigned int) (w->hregs.hcpu.switcher);
     void (*trap) (void);
     unsigned int *intr;
     unsigned int i;
     void *old;
+    struct v_chunk *chunk = h_raw_palloc(0);
+    unsigned int phys = chunk->phys;
+    void *virt = h_allocv(phys);
 
-    if (w->npage == h_switch_to1) {
-        w->npage = h_switch_to2;
-        trap = trap_start2;
-        asm volatile ("movl $restoreCS2, %0":"=r" (hostcpu.eip));
-        w->hregs.hcpu.eip = hostcpu.eip;
-    } else if (w->npage == h_switch_to2) {
-        w->npage = h_switch_to3;
-        trap = trap_start3;
-        asm volatile ("movl $restoreCS3, %0":"=r" (hostcpu.eip));
-        w->hregs.hcpu.eip = hostcpu.eip;
-    } else if (w->npage == h_switch_to3) {
-        w->npage = h_switch_to4;
-        trap = trap_start4;
-        asm volatile ("movl $restoreCS4, %0":"=r" (hostcpu.eip));
-        w->hregs.hcpu.eip = hostcpu.eip;
-    } else {
-        w->npage = h_switch_to1;
-        trap = trap_start1;
-        asm volatile ("movl $restoreCS1, %0":"=r" (hostcpu.eip));
-        w->hregs.hcpu.eip = hostcpu.eip;
-    }
+    h_memcpy(virt, w->hregs.hcpu.switcher, 4096);
+
+    w->hregs.hcpu.switcher = virt;
+    trap =
+        (void (*)(void)) ((((unsigned int) trap_start) & H_POFF_MASK) +
+        (((unsigned int) virt) & H_PFN_MASK));
+    asm volatile ("movl $restoreCS, %0":"=r" (hostcpu.eip));
+    hostcpu.eip =
+        (hostcpu.eip & H_POFF_MASK) + (((unsigned int) virt) & H_PFN_MASK);
+    w->hregs.hcpu.eip = hostcpu.eip;
 
     if (spt == NULL) {
         h_set_map(w->htrbase, oldnp, 0, 1, V_PAGE_NOMAP);
-        h_set_map(w->htrbase, (unsigned long) w->npage,
-            h_v2p((h_addr_t) w->npage), 1, V_PAGE_W | V_PAGE_VM);
+        h_set_map(w->htrbase, (unsigned long) w->hregs.hcpu.switcher,
+            h_v2p((h_addr_t) w->hregs.hcpu.switcher), 1, V_PAGE_W | V_PAGE_VM);
     } else
         while (spt != NULL) {
             h_set_map(spt->spt_paddr, oldnp, 0, 1, V_PAGE_NOMAP);
-            h_set_map(spt->spt_paddr, (unsigned long) w->npage,
-                h_v2p((h_addr_t) w->npage), 1, V_PAGE_W | V_PAGE_VM);
+            h_set_map(spt->spt_paddr, (unsigned long) w->hregs.hcpu.switcher,
+                h_v2p((h_addr_t) w->hregs.hcpu.switcher), 1,
+                V_PAGE_W | V_PAGE_VM);
             spt = spt->next;
         }
     intr = (void *) (w->hregs.gcpu.idt.base);
