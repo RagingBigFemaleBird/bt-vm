@@ -22,10 +22,10 @@
 #include "host/include/cpu.h"
 
 extern struct h_cpu hostcpu;
-extern void TrapStart4(void);
-extern void TrapStart3(void);
-extern void TrapStart2(void);
-extern void TrapStart1(void);
+extern void trap_start4(void);
+extern void trap_start3(void);
+extern void trap_start2(void);
+extern void trap_start1(void);
 
 void
 h_world_init(struct v_world *world)
@@ -36,7 +36,7 @@ h_world_init(struct v_world *world)
     void *old = (void *) hostcpu.gdt.base;
     void *new;
     unsigned int eflags;
-    void (*trap) (void) = TrapStart2;
+    void (*trap) (void) = trap_start2;
     unsigned int *intr;
     int i;
     unsigned int traddr;
@@ -174,22 +174,22 @@ h_relocate_npage(struct v_world *w)
 
     if (w->npage == h_switch_to1) {
         w->npage = h_switch_to2;
-        trap = TrapStart2;
+        trap = trap_start2;
         asm volatile ("movl $restoreCS2, %0":"=r" (hostcpu.eip));
         w->hregs.hcpu.eip = hostcpu.eip;
     } else if (w->npage == h_switch_to2) {
         w->npage = h_switch_to3;
-        trap = TrapStart3;
+        trap = trap_start3;
         asm volatile ("movl $restoreCS3, %0":"=r" (hostcpu.eip));
         w->hregs.hcpu.eip = hostcpu.eip;
     } else if (w->npage == h_switch_to3) {
         w->npage = h_switch_to4;
-        trap = TrapStart4;
+        trap = trap_start4;
         asm volatile ("movl $restoreCS4, %0":"=r" (hostcpu.eip));
         w->hregs.hcpu.eip = hostcpu.eip;
     } else {
         w->npage = h_switch_to1;
-        trap = TrapStart1;
+        trap = trap_start1;
         asm volatile ("movl $restoreCS1, %0":"=r" (hostcpu.eip));
         w->hregs.hcpu.eip = hostcpu.eip;
     }

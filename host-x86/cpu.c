@@ -44,7 +44,9 @@ unsigned int bpaddr = /*0x8100; */ 0;   //0xc022e294;     //0x226255;
 unsigned int bp_reached = 0;
 #ifdef BT_CACHE
 static int cache_offset;
-void CacheStart1(void);
+static int sensitive_instruction_cache_offset;
+void bt_cache_start1(void);
+void sensitive_instruction_cache1(void);
 #endif
 
 int
@@ -84,7 +86,8 @@ h_cpu_init(void)
     asm volatile ("pop %0":"=r" (hostcpu.eflags));
     asm volatile ("movl $restoreCS2, %0":"=r" (hostcpu.eip));
 #ifdef BT_CACHE
-    cache_offset = ((void *) CacheStart1) - ((void *) h_switch_to1);
+    cache_offset = ((void *) bt_cache_start1) - ((void *) h_switch_to1);
+    sensitive_instruction_cache_offset = ((void *) sensitive_instruction_cache1) - ((void *) h_switch_to1);
 #endif
     return 0;
 }
@@ -247,11 +250,11 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
     asm volatile ("push $0xbeef"); \
     asm volatile ("sub $4, %esp"); \
     asm volatile ("pusha"); \
-    asm volatile ("mov $CacheStart"#function_no", %eax"); \
+    asm volatile ("mov $bt_cache_start"#function_no", %eax"); \
     asm volatile ("jmp 10f"); \
     asm volatile (".balign 4"); \
-    asm volatile (".global CacheStart"#function_no); \
-    asm volatile ("CacheStart"#function_no":"); \
+    asm volatile (".global bt_cache_start"#function_no); \
+    asm volatile ("bt_cache_start"#function_no":"); \
     asm volatile (".long 0"); \
     asm volatile (".long 0"); \
     asm volatile (".long 0"); \
@@ -269,6 +272,13 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
     asm volatile (".long 0"); \
     asm volatile (".long 0"); \
     asm volatile (".endr"); \
+    asm volatile (".global sensitive_instruction_cache"#function_no); \
+    asm volatile ("sensitive_instruction_cache"#function_no":"); \
+    asm volatile (".long 0"); /*control flag */\
+    asm volatile (".long 0"); /*ring*/\
+    asm volatile (".long 0"); /*nt*/\
+    asm volatile (".long 0"); /*iopl*/\
+    asm volatile (".long 0"); /*int*/\
     asm volatile ("10:"); \
     asm volatile ("mov %cs:(%eax), %edx"); \
     asm volatile ("mov %cs:8(%eax), %ecx"); \
@@ -607,8 +617,8 @@ __attribute__((aligned(0x1000))) int h_switch_to##function_no(unsigned long trba
 \
 \
     asm volatile (".balign 32"); \
-    asm volatile (".global TrapStart"#function_no); \
-    asm volatile ("TrapStart"#function_no":"); \
+    asm volatile (".global trap_start"#function_no); \
+    asm volatile ("trap_start"#function_no":"); \
     asm volatile ("vector=0"); \
     asm volatile (".rept (256+6)/7"); \
     asm volatile (".balign 32"); \
