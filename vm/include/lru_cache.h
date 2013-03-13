@@ -40,7 +40,8 @@ struct lru_cache {
 };
 
 struct lru_cache_entry *lru_cache_find32(struct lru_cache *, unsigned int);
-struct lru_cache_entry *lru_cache_update32(struct lru_cache *, unsigned int, int *);
+struct lru_cache_entry *lru_cache_update32(struct lru_cache *, unsigned int,
+    int *);
 struct lru_cache *lru_cache_init(unsigned int, unsigned int);
 
 #endif

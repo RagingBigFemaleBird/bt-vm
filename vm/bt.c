@@ -709,21 +709,15 @@ v_poi_plan_bp(struct v_world *world, struct v_poi *poi, int bp_count)
 
 #ifdef BT_CACHE
 
-#define BT_CACHE_TARGET_ENTRIES_TOTAL 4
-
-struct cache_target_payload {
-    unsigned int total;
-    unsigned int replace;
-    unsigned int targets[BT_CACHE_TARGET_ENTRIES_TOTAL];
-};
-
 void
 v_update_pb_cache(struct v_world *world, unsigned long branch,
     unsigned long dest)
 {
     int new_entry = 0;
-    struct lru_cache_entry *find = lru_cache_update32(world->pb_cache, branch, &new_entry);
-    struct cache_target_payload *payload = (struct cache_target_payload*)(find->payload);
+    struct lru_cache_entry *find =
+        lru_cache_update32(world->pb_cache, branch, &new_entry);
+    struct cache_target_payload *payload =
+        (struct cache_target_payload *) (find->payload);
     if (new_entry) {
         payload->total = 0;
         payload->replace = 0;
@@ -731,6 +725,8 @@ v_update_pb_cache(struct v_world *world, unsigned long branch,
     if (payload->total >= BT_CACHE_TARGET_ENTRIES_TOTAL) {
         payload->targets[payload->replace] = dest;
         payload->replace++;
+        if (payload->replace >= BT_CACHE_TARGET_ENTRIES_TOTAL)
+            payload->replace = 0;
     } else {
         payload->targets[payload->total] = dest;
         payload->total++;
@@ -746,7 +742,8 @@ v_dump_pb_cache(struct v_world *world)
         struct lru_cache_entry *p =
             head + i * (world->pb_cache->payload_size +
             sizeof(struct lru_cache_entry));
-        struct cache_target_payload *payload = (struct cache_target_payload*)(p->payload);
+        struct cache_target_payload *payload =
+            (struct cache_target_payload *) (p->payload);
         V_ERR("Cached PB %x dest %x", p->key32, payload->targets[0]);
         for (j = 1; j < payload->total; j++) {
             V_ERR("--- dest %x", payload->targets[j]);
@@ -967,7 +964,8 @@ _v_bt_cache(struct v_world *world, struct v_poi *poi, int depth,
             struct lru_cache_entry *find =
                 lru_cache_find32(world->pb_cache, todo_poi[i]->addr);
             if (find != NULL) {
-                struct cache_target_payload *payload = (struct cache_target_payload*)(find->payload);
+                struct cache_target_payload *payload =
+                    (struct cache_target_payload *) (find->payload);
                 for (j = 0; j < payload->total; j++) {
                     unsigned long possible_ip = payload->targets[j];
                     unsigned long phys = g_v2p(world, possible_ip, 1);
@@ -980,7 +978,8 @@ _v_bt_cache(struct v_world *world, struct v_poi *poi, int depth,
                         continue;
                     V_VERBOSE("Found poi %lx for %lx", possible_poi->addr,
                         todo_poi[i]->addr);
-                    _v_bt_cache(world, possible_poi, depth + 1, cache, cache_count);
+                    _v_bt_cache(world, possible_poi, depth + 1, cache,
+                        cache_count);
                 }
             }
         }
@@ -1007,7 +1006,8 @@ v_bt_cache(struct v_world *world)
             struct lru_cache_entry *find =
                 lru_cache_find32(world->pb_cache, save_poi[i]->addr);
             if (find != NULL) {
-                struct cache_target_payload *payload = (struct cache_target_payload*)(find->payload);
+                struct cache_target_payload *payload =
+                    (struct cache_target_payload *) (find->payload);
                 for (j = 0; j < payload->total; j++) {
                     unsigned long possible_ip = payload->targets[j];
                     unsigned long phys = g_v2p(world, possible_ip, 1);

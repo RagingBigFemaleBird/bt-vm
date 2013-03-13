@@ -41,6 +41,13 @@ struct v_poi_tree_plan {
 #define BT_CACHE_LEVEL 16
 #define BT_CACHE_CAPACITY 16
 #define BT_CACHE_PB_COUNT 16
+#define BT_CACHE_TARGET_ENTRIES_TOTAL 4
+
+struct cache_target_payload {
+    unsigned int total;
+    unsigned int replace;
+    unsigned int targets[BT_CACHE_TARGET_ENTRIES_TOTAL];
+};
 
 struct v_poi_cached_tree_plan {
     unsigned long addr;
