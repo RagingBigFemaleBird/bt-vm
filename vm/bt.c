@@ -709,26 +709,48 @@ v_poi_plan_bp(struct v_world *world, struct v_poi *poi, int bp_count)
 
 #ifdef BT_CACHE
 
+#define BT_CACHE_TARGET_ENTRIES_TOTAL 4
+
+struct cache_target_payload {
+    unsigned int total;
+    unsigned int replace;
+    unsigned int targets[BT_CACHE_TARGET_ENTRIES_TOTAL];
+};
+
 void
 v_update_pb_cache(struct v_world *world, unsigned long branch,
     unsigned long dest)
 {
-    struct lru_cache_entry *find = lru_cache_update32(world->pb_cache, branch);
-    void *payload = find->payload;
-    *(unsigned int *) payload = dest;
+    int new_entry = 0;
+    struct lru_cache_entry *find = lru_cache_update32(world->pb_cache, branch, &new_entry);
+    struct cache_target_payload *payload = (struct cache_target_payload*)(find->payload);
+    if (new_entry) {
+        payload->total = 0;
+        payload->replace = 0;
+    }
+    if (payload->total >= BT_CACHE_TARGET_ENTRIES_TOTAL) {
+        payload->targets[payload->replace] = dest;
+        payload->replace++;
+    } else {
+        payload->targets[payload->total] = dest;
+        payload->total++;
+    }
 }
 
 void
 v_dump_pb_cache(struct v_world *world)
 {
-    int i;
+    int i, j;
     void *head = world->pb_cache->body;
     for (i = 0; i < world->pb_cache->used; i++) {
         struct lru_cache_entry *p =
             head + i * (world->pb_cache->payload_size +
             sizeof(struct lru_cache_entry));
-        void *payload = p->payload;
-        V_ERR("Cached PB %x dest %x", p->key32, *(unsigned int *) payload);
+        struct cache_target_payload *payload = (struct cache_target_payload*)(p->payload);
+        V_ERR("Cached PB %x dest %x", p->key32, payload->targets[0]);
+        for (j = 1; j < payload->total; j++) {
+            V_ERR("--- dest %x", payload->targets[j]);
+        }
     }
 }
 #endif
@@ -903,7 +925,7 @@ void
 _v_bt_cache(struct v_world *world, struct v_poi *poi, int depth,
     struct v_poi_cached_tree_plan *cache, int *cache_count)
 {
-    int i, total;
+    int i, j, total;
     unsigned int cache_addr;
     struct v_poi *todo_poi[H_DEBUG_MAX_BP];
     if (depth >= BT_CACHE_LEVEL)
@@ -945,18 +967,21 @@ _v_bt_cache(struct v_world *world, struct v_poi *poi, int depth,
             struct lru_cache_entry *find =
                 lru_cache_find32(world->pb_cache, todo_poi[i]->addr);
             if (find != NULL) {
-                unsigned long possible_ip = *(unsigned int *) find->payload;
-                unsigned long phys = g_v2p(world, possible_ip, 1);
-                struct v_page *mpage = h_p2mp(world, phys);
-                struct v_poi *possible_poi;
-                if (mpage == NULL)
-                    continue;
-                possible_poi = v_find_poi(mpage, possible_ip);
-                if (possible_poi == NULL)
-                    continue;
-                V_VERBOSE("Found poi %lx for %lx", possible_poi->addr,
-                    todo_poi[i]->addr);
-                _v_bt_cache(world, possible_poi, depth + 1, cache, cache_count);
+                struct cache_target_payload *payload = (struct cache_target_payload*)(find->payload);
+                for (j = 0; j < payload->total; j++) {
+                    unsigned long possible_ip = payload->targets[j];
+                    unsigned long phys = g_v2p(world, possible_ip, 1);
+                    struct v_page *mpage = h_p2mp(world, phys);
+                    struct v_poi *possible_poi;
+                    if (mpage == NULL)
+                        continue;
+                    possible_poi = v_find_poi(mpage, possible_ip);
+                    if (possible_poi == NULL)
+                        continue;
+                    V_VERBOSE("Found poi %lx for %lx", possible_poi->addr,
+                        todo_poi[i]->addr);
+                    _v_bt_cache(world, possible_poi, depth + 1, cache, cache_count);
+                }
             }
         }
     }
@@ -965,7 +990,7 @@ _v_bt_cache(struct v_world *world, struct v_poi *poi, int depth,
 void
 v_bt_cache(struct v_world *world)
 {
-    int i, total;
+    int i, j, total;
     struct v_poi *save_poi[H_DEBUG_MAX_BP];
     struct v_poi_cached_tree_plan cache[BT_CACHE_CAPACITY];
     int cache_count = 0;
@@ -982,18 +1007,21 @@ v_bt_cache(struct v_world *world)
             struct lru_cache_entry *find =
                 lru_cache_find32(world->pb_cache, save_poi[i]->addr);
             if (find != NULL) {
-                unsigned long possible_ip = *(unsigned int *) find->payload;
-                unsigned long phys = g_v2p(world, possible_ip, 1);
-                struct v_page *mpage = h_p2mp(world, phys);
-                struct v_poi *possible_poi;
-                if (mpage == NULL)
-                    continue;
-                possible_poi = v_find_poi(mpage, possible_ip);
-                if (possible_poi == NULL)
-                    continue;
-                V_VERBOSE("Found poi %lx for %lx", possible_poi->addr,
-                    save_poi[i]->addr);
-                _v_bt_cache(world, possible_poi, 0, cache, &cache_count);
+                struct cache_target_payload *payload = (struct cache_target_payload*)(find->payload);
+                for (j = 0; j < payload->total; j++) {
+                    unsigned long possible_ip = payload->targets[j];
+                    unsigned long phys = g_v2p(world, possible_ip, 1);
+                    struct v_page *mpage = h_p2mp(world, phys);
+                    struct v_poi *possible_poi;
+                    if (mpage == NULL)
+                        continue;
+                    possible_poi = v_find_poi(mpage, possible_ip);
+                    if (possible_poi == NULL)
+                        continue;
+                    V_VERBOSE("Found poi %lx for %lx", possible_poi->addr,
+                        save_poi[i]->addr);
+                    _v_bt_cache(world, possible_poi, 0, cache, &cache_count);
+                }
             }
         }
     }

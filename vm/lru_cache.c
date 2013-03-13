@@ -45,7 +45,7 @@ lru_cache_find32(struct lru_cache *cache, unsigned int key32)
 }
 
 struct lru_cache_entry *
-lru_cache_update32(struct lru_cache *cache, unsigned int key32)
+lru_cache_update32(struct lru_cache *cache, unsigned int key32, int *new_entry)
 {
     int i, replace, replace_ts;
     struct lru_cache_entry *ret;
@@ -58,6 +58,7 @@ lru_cache_update32(struct lru_cache *cache, unsigned int key32)
         ret->frequency++;
         return ret;
     }
+    *new_entry = 1;
     if (cache->used < cache->total) {
         ((struct lru_cache_entry *) (body + unit_size * cache->used))->key32 =
             key32;
