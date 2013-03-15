@@ -1611,6 +1611,7 @@ h_gpfault(struct v_world *world)
         goto undef_inst;
         break;
     case 0xfa:
+        h_perf_inc(H_PERF_PI_INTSTATE, 1);
         V_EVENT("CLI:\n");
 #ifdef DEBUG_CODECONTROL
         if (last_is_cli) {
@@ -1629,6 +1630,7 @@ h_gpfault(struct v_world *world)
         world->hregs.gcpu.eip++;
         break;
     case 0xfb:
+        h_perf_inc(H_PERF_PI_INTSTATE, 1);
         V_EVENT("STI:\n");
         if (world->gregs.iopl < world->gregs.ring) {
             world->gregs.has_errorc = 1;
@@ -1661,6 +1663,7 @@ h_gpfault(struct v_world *world)
         break;
     case 0xe4:
         /*no mod66 */
+        h_perf_inc(H_PERF_PI_IO, 1);
         h_perf_inc(H_PERF_IO, 1);
         V_LOG("IO(in):%x", (unsigned int) (*(inst + 1)));
         g_do_io(world, G_IO_IN, (unsigned int) (*(inst + 1)),
@@ -1668,6 +1671,7 @@ h_gpfault(struct v_world *world)
         world->hregs.gcpu.eip += 2;
         break;
     case 0xef:
+        h_perf_inc(H_PERF_PI_IO, 1);
         if ((mod66 && g_get_current_ex_mode(world) == G_EX_MODE_16)
             || ((!mod66)
                 && g_get_current_ex_mode(world) == G_EX_MODE_32)) {
@@ -1697,6 +1701,7 @@ h_gpfault(struct v_world *world)
         break;
     case 0xe6:
         /*no mod66 */
+        h_perf_inc(H_PERF_PI_IO, 1);
         h_perf_inc(H_PERF_IO, 1);
         V_LOG("IO(out):%x, al(%x)", (unsigned int) (*(inst + 1)),
             world->hregs.gcpu.eax & 0xff);
@@ -1706,6 +1711,7 @@ h_gpfault(struct v_world *world)
         break;
     case 0xee:
         /*no mod66 */
+        h_perf_inc(H_PERF_PI_IO, 1);
         h_perf_inc(H_PERF_IO, 1);
         V_LOG("IO(out) dx(%x), al(%x)", world->hregs.gcpu.edx & 0xffff,
             world->hregs.gcpu.eax & 0xff);
@@ -1715,6 +1721,7 @@ h_gpfault(struct v_world *world)
         break;
     case 0xec:
         /*no mod66 */
+        h_perf_inc(H_PERF_PI_IO, 1);
         h_perf_inc(H_PERF_IO, 1);
         V_LOG("IO(in) al(%x), dx(%x)", world->hregs.gcpu.eax & 0xff,
             world->hregs.gcpu.edx & 0xffff);
@@ -1723,6 +1730,7 @@ h_gpfault(struct v_world *world)
         world->hregs.gcpu.eip += 1;
         break;
     case 0xed:
+        h_perf_inc(H_PERF_PI_IO, 1);
         h_perf_inc(H_PERF_IO, 1);
         if ((mod66 && g_get_current_ex_mode(world) == G_EX_MODE_16)
             || ((!mod66)
@@ -1752,6 +1760,7 @@ h_gpfault(struct v_world *world)
         world->hregs.gcpu.eip += 1;
         break;
     case 0x8c:
+        h_perf_inc(H_PERF_PI_LOADSEG, 1);
         V_LOG("MOV from SEG into REG %x", (unsigned int) (*(inst + 1)));
         if (world->gregs.mode == G_MODE_REAL) {
             world->status = VM_PAUSED;
@@ -1840,6 +1849,7 @@ h_gpfault(struct v_world *world)
         world->hregs.gcpu.eip += 2;
         break;
     case 0x0f:
+        h_perf_inc(H_PERF_PI_LOADSEG, 1);
         if ((unsigned int) (*(inst + 1)) == 0x01) {
             V_EVENT("LTables:");
             if ((unsigned int) (*(inst + 2)) >= 0x38
@@ -2231,6 +2241,7 @@ h_gpfault(struct v_world *world)
         goto undef_inst;
         break;
     case 0x8e:
+        h_perf_inc(H_PERF_PI_LOADSEG, 1);
         if (((unsigned int) (*(inst + 1)) <= 0xd7)
             && ((unsigned int) (*(inst + 1)) >= 0xd0)) {
             int reg = (unsigned int) (*(inst + 1)) & 0xf;
@@ -2303,6 +2314,7 @@ h_gpfault(struct v_world *world)
         h_do_return(world, parac, 0);
         break;
     case 0x16:
+        h_perf_inc(H_PERF_PI_LOADSEG, 1);
         V_LOG("PUSH SS");
         if (g_get_current_ex_mode(world) == G_EX_MODE_16) {
             unsigned int sp = g_get_sp(world);
@@ -2320,6 +2332,7 @@ h_gpfault(struct v_world *world)
         }
         break;
     case 0x17:
+        h_perf_inc(H_PERF_PI_LOADSEG, 1);
         V_LOG("POP SS");
         if (g_get_current_ex_mode(world) == G_EX_MODE_16) {
             unsigned int sp = g_get_sp(world);
@@ -2346,6 +2359,7 @@ h_gpfault(struct v_world *world)
         }
         break;
     case 0x1f:
+        h_perf_inc(H_PERF_PI_LOADSEG, 1);
         V_LOG("POP DS");
         if (g_get_current_ex_mode(world) == G_EX_MODE_16) {
             unsigned int sp = g_get_sp(world);
@@ -2374,6 +2388,7 @@ h_gpfault(struct v_world *world)
         }
         break;
     case 0x07:
+        h_perf_inc(H_PERF_PI_LOADSEG, 1);
         V_LOG("POP ES");
         if (g_get_current_ex_mode(world) == G_EX_MODE_16) {
             unsigned int sp = g_get_sp(world);
@@ -2406,6 +2421,7 @@ h_gpfault(struct v_world *world)
         h_do_return(world, 0, 0);
         break;
     case 0x9c:
+        h_perf_inc(H_PERF_PI_FLAGS, 1);
         V_EVENT("PUSHF:");
         if (world->gregs.mode == G_MODE_REAL) {
             unsigned int sp = g_get_sp(world);
@@ -2452,6 +2468,7 @@ h_gpfault(struct v_world *world)
         }
         break;
     case 0x9d:
+        h_perf_inc(H_PERF_PI_FLAGS, 1);
         V_EVENT("POPF:");
         if (world->gregs.mode == G_MODE_REAL) {
             unsigned int sp = g_get_sp(world);
@@ -2520,18 +2537,22 @@ h_gpfault(struct v_world *world)
         }
         break;
     case 0x6f:
+        h_perf_inc(H_PERF_PI_IO, 1);
         V_ALERT("OUTSD/OUTSW");
         world->hregs.gcpu.eip += 1;
         break;
     case 0x6e:
+        h_perf_inc(H_PERF_PI_IO, 1);
         V_ALERT("OUTSB");
         world->hregs.gcpu.eip += 1;
         break;
     case 0x6c:
+        h_perf_inc(H_PERF_PI_IO, 1);
         V_ALERT("INSB");
         world->hregs.gcpu.eip += 1;
         break;
     case 0x6d:
+        h_perf_inc(H_PERF_PI_IO, 1);
         V_ALERT("INSD/INSW");
         world->hregs.gcpu.eip += 1;
         break;
