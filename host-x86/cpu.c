@@ -274,13 +274,6 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
     asm volatile (".long 0"); \
     asm volatile (".long 0"); \
     asm volatile (".endr"); \
-    asm volatile (".global sensitive_instruction_cache"); \
-    asm volatile ("sensitive_instruction_cache:"); \
-    asm volatile (".long 0"); /*control flag */\
-    asm volatile (".long 0"); /*ring*/\
-    asm volatile (".long 0"); /*nt*/\
-    asm volatile (".long 0"); /*iopl*/\
-    asm volatile (".long 0"); /*int*/\
     asm volatile ("10:"); \
     asm volatile ("mov %cs:(%eax), %edx"); \
     asm volatile ("mov %cs:8(%eax), %ecx"); \
@@ -386,6 +379,140 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
 #define CACHE_BT_QUICKPATH
 #endif
 
+#define QUICKPATH_GP_ENABLED
+
+#ifdef QUICKPATH_GP_ENABLED
+#define GP_FAULT_QUICKPATH \
+    asm volatile ("cmp $(~0xd + 0x80), (%esp)");\
+    asm volatile ("je 100f");
+#else
+#define GP_FAULT_QUICKPATH
+#endif
+
+#ifdef QUICKPATH_GP_ENABLED
+#define GP_FAULT_QUICKPATH_HANDLER \
+    asm volatile ("100:"); \
+    asm volatile ("sub $4, %esp"); \
+    asm volatile ("pusha"); \
+    asm volatile ("mov $sensitive_instruction_cache, %eax"); \
+    asm volatile ("jmp 110f"); \
+    asm volatile (".global sensitive_instruction_cache"); \
+    asm volatile ("sensitive_instruction_cache:"); \
+    asm volatile (".long 0"); /*control flag */\
+    asm volatile (".long 0"); /* rf */\
+    asm volatile (".long 0"); /*ring*/\
+    asm volatile (".long 0"); /*nt*/\
+    asm volatile (".long 0"); /*iopl*/\
+    asm volatile (".long 0"); /*int*/\
+    asm volatile ("110:"); \
+    asm volatile ("mov %cs:(%eax), %ecx"); /* eax points to control flag */\
+    asm volatile ("cmp $0, %ecx"); \
+    asm volatile ("je 111f"); \
+    asm volatile ("mov %ss:44(%esp), %ebx"); /*ebx is eip */\
+    asm volatile ("mov %ss:(%ebx), %cl"); \
+    asm volatile ("cmp $0xfa, %cl"); \
+    asm volatile ("jne 120f"); \
+    asm volatile ("movl $0x2, %ss:(%eax)"); \
+    asm volatile ("movl $0x0, %ss:20(%eax)"); \
+    asm volatile ("inc %ebx"); \
+    asm volatile ("mov %ebx, %ss:44(%esp)"); \
+    asm volatile ("mov %ss:52(%esp), %ecx"); /* rf flag */\
+    asm volatile ("and $0xfffeffff, %ecx"); \
+    asm volatile ("mov %ecx, %ss:52(%esp)"); \
+    asm volatile ("popa"); \
+    asm volatile ("add $12, %esp"); \
+    asm volatile ("iret"); \
+    asm volatile ("jmp 130f"); \
+    asm volatile ("120:"); \
+    asm volatile ("cmp $0xfb, %cl"); \
+    asm volatile ("jne 121f"); \
+    asm volatile ("movl $0x2, %ss:(%eax)"); \
+    asm volatile ("movl $0x1, %ss:20(%eax)"); \
+    asm volatile ("inc %ebx"); \
+    asm volatile ("mov %ebx, %ss:44(%esp)"); \
+    asm volatile ("mov %ss:52(%esp), %ecx"); /* rf flag */\
+    asm volatile ("and $0xfffeffff, %ecx"); \
+    asm volatile ("mov %ecx, %ss:52(%esp)"); \
+    asm volatile ("popa"); \
+    asm volatile ("add $12, %esp"); \
+    asm volatile ("iret"); \
+    asm volatile ("jmp 130f"); \
+    asm volatile ("121:"); \
+    asm volatile ("130:"); \
+    asm volatile ("111:"); \
+    asm volatile ("jmp 8b");
+#else
+#define GP_FAULT_QUICKPATH_HANDLER
+#endif
+
+void h_gp_fault_quickpath_preamble(struct v_world *world)
+{
+    void *cache = world->hregs.hcpu.switcher;
+    cache += sensitive_instruction_cache_offset;
+    if (world->gregs.ring == 0 && world->gregs.mode != G_MODE_REAL) {
+        *((unsigned int *) (cache)) = 1;
+        *((unsigned int *) (cache + 4)) = world->gregs.rf;
+        *((unsigned int *) (cache + 20)) = v_int_enabled(world);
+    } else {
+        *((unsigned int *) (cache)) = 0;
+        *((unsigned int *) (cache + 4)) = world->gregs.rf;
+    }
+}
+
+void h_gp_fault_quickpath_postprocessing(struct v_world *world)
+{
+    void *cache = world->hregs.hcpu.switcher;
+    int result;
+    cache += sensitive_instruction_cache_offset;
+    result = *((unsigned int *) (cache));
+    if (result == 2) {
+        int interrupt = *((unsigned int *) (cache + 20));
+        if (!interrupt) {
+            v_disable_int(world);
+            world->gregs.eflags &= (~H_EFLAGS_IF);
+        } else {
+            v_enable_int(world);
+            world->gregs.eflags |= (H_EFLAGS_IF);
+        }
+    }
+}
+
+void h_gp_fault_quickpath_postprocessing2(struct v_world *world)
+{
+    void *cache = world->hregs.hcpu.switcher;
+    int result;
+    cache += sensitive_instruction_cache_offset;
+    result = *((unsigned int *) (cache));
+    if (result == 2) {
+        int interrupt = *((unsigned int *) (cache + 20));
+        if (interrupt) {
+            if (!(world->hregs.gcpu.eflags & H_EFLAGS_TF))
+                g_pic_serve(world);
+        }
+    }
+}
+
+#ifdef QUICKPATH_GP_ENABLED
+#define GP_FAULT_QUICKPATH_PREAMBLE \
+    h_gp_fault_quickpath_preamble(w);
+#else
+#define GP_FAULT_QUICKPATH_PREAMBLE
+#endif
+
+#ifdef QUICKPATH_GP_ENABLED
+#define GP_FAULT_QUICKPATH_POSTPROCESSING \
+    h_gp_fault_quickpath_postprocessing(w);
+#else
+#define GP_FAULT_QUICKPATH_POSTPROCESSING
+#endif
+
+#ifdef QUICKPATH_GP_ENABLED
+#define GP_FAULT_QUICKPATH_POSTPROCESSING2 \
+    h_gp_fault_quickpath_postprocessing2(w);
+#else
+#define GP_FAULT_QUICKPATH_POSTPROCESSING2
+#endif
+
 #ifdef BT_CACHE
 #define CACHE_BT_RESTORE \
     h_bt_cache_restore(w);
@@ -465,9 +592,11 @@ h_switcher(unsigned long trbase, struct v_world *w)
     asm volatile ("je 3f");
     asm volatile ("cmp $(~0x11 + 0x80), (%esp)");
     asm volatile ("je 3f");
-    CACHE_BT_QUICKPATH asm volatile ("push $0xbeef");   /* some impossible value */
+    CACHE_BT_QUICKPATH;
+    asm volatile ("push $0xbeef");   /* some impossible value */
 
     asm volatile ("3:");
+    GP_FAULT_QUICKPATH;
 
     asm volatile ("sub $4, %esp");
 
@@ -531,7 +660,9 @@ h_switcher(unsigned long trbase, struct v_world *w)
 
     asm volatile ("jmp 6f");
     asm volatile ("7:");
-    CACHE_BT_CACHE asm volatile (".balign 32");
+    CACHE_BT_CACHE;
+    GP_FAULT_QUICKPATH_HANDLER;
+    asm volatile (".balign 32");
     asm volatile (".global trap_start");
     asm volatile ("trap_start:");
     asm volatile ("vector=0");
@@ -566,6 +697,7 @@ h_switch_to(unsigned long trbase, struct v_world *w)
     if (w->status == VM_IDLE) {
         return 0;
     }
+    GP_FAULT_QUICKPATH_PREAMBLE;
     h_perf_tsc_begin(0);
 
     V_LOG("Using switcher %p", h->hcpu.switcher);
@@ -587,9 +719,10 @@ h_switch_to(unsigned long trbase, struct v_world *w)
         h->gcpu.tr, h->gcpu.intr, h->gcpu.v86ds, h->gcpu.v86es, w->gregs.cstrue,
         w->gregs.dstrue, w->gregs.estrue, w->gregs.sstrue, w->gregs.cr3,
         w->htrbase);
-    CACHE_BT_RESTORE
-        /* fix up the stupid RF flag */
-        if (w->gregs.rf)
+    CACHE_BT_RESTORE;
+    GP_FAULT_QUICKPATH_POSTPROCESSING;
+    /* fix up the stupid RF flag */
+    if (w->gregs.rf)
         h->gcpu.eflags |= H_EFLAGS_RF;
     else
         h->gcpu.eflags &= (~H_EFLAGS_RF);
@@ -671,6 +804,7 @@ h_switch_to(unsigned long trbase, struct v_world *w)
         if (!(h->gcpu.eflags & H_EFLAGS_TF))
             g_pic_serve(w);
     }
+    GP_FAULT_QUICKPATH_POSTPROCESSING2;
     if ((h->gcpu.intr & 0xff) >= 0x20)
         h_do_int(h->gcpu.intr & 0xff);
 
