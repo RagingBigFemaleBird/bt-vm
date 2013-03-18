@@ -445,7 +445,8 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
 #define GP_FAULT_QUICKPATH_HANDLER
 #endif
 
-void h_gp_fault_quickpath_preamble(struct v_world *world)
+void
+h_gp_fault_quickpath_preamble(struct v_world *world)
 {
     void *cache = world->hregs.hcpu.switcher;
     cache += sensitive_instruction_cache_offset;
@@ -459,7 +460,8 @@ void h_gp_fault_quickpath_preamble(struct v_world *world)
     }
 }
 
-void h_gp_fault_quickpath_postprocessing(struct v_world *world)
+void
+h_gp_fault_quickpath_postprocessing(struct v_world *world)
 {
     void *cache = world->hregs.hcpu.switcher;
     int result;
@@ -477,7 +479,8 @@ void h_gp_fault_quickpath_postprocessing(struct v_world *world)
     }
 }
 
-void h_gp_fault_quickpath_postprocessing2(struct v_world *world)
+void
+h_gp_fault_quickpath_postprocessing2(struct v_world *world)
 {
     void *cache = world->hregs.hcpu.switcher;
     int result;
@@ -593,7 +596,7 @@ h_switcher(unsigned long trbase, struct v_world *w)
     asm volatile ("cmp $(~0x11 + 0x80), (%esp)");
     asm volatile ("je 3f");
     CACHE_BT_QUICKPATH;
-    asm volatile ("push $0xbeef");   /* some impossible value */
+    asm volatile ("push $0xbeef");      /* some impossible value */
 
     asm volatile ("3:");
     GP_FAULT_QUICKPATH;
@@ -656,7 +659,7 @@ h_switcher(unsigned long trbase, struct v_world *w)
 
 
     asm volatile (".global restoreCS");
-    asm volatile ("restoreCS:");
+    asm volatile ("restoreCS:":::"memory", "cc");
 
     asm volatile ("jmp 6f");
     asm volatile ("7:");
@@ -1482,6 +1485,7 @@ h_do_return(struct v_world *world, int para_count, int is_iret)
 #ifdef USERMODE_TESTS
 
 int usermode_tests_reset = 1;
+int usermode_test_done = 9999;
 
 #endif
 
@@ -1498,8 +1502,27 @@ h_inject_int(struct v_world *world, unsigned int int_no)
 #ifdef USERMODE_TESTS
     if (int_no == 0x80 && world->hregs.gcpu.eax == 24 && usermode_tests_reset) {
         v_perf_init();
+        h_perf_init();
         usermode_tests_reset = 0;
         V_ERR("Usermode test reset counters!");
+    }
+    if (int_no == 0x80 && world->hregs.gcpu.eax == 24 && !usermode_tests_reset) {
+        if (usermode_test_done > 0) {
+            int i;
+            usermode_test_done--;
+            if (usermode_test_done <= 0) {
+                V_ERR("Usermode test done counters!");
+                for (i = 0; i < V_PERF_COUNT; i++) {
+                    V_ERR("VM Perf Counter %x, %lx", i, v_perf_get(i));
+                }
+                for (i = 0; i < H_PERF_COUNT; i++) {
+                    V_ERR("Host Perf Counter %x, %lx", i, h_perf_get(i));
+                }
+                for (i = 0; i < H_TSC_COUNT; i++) {
+                    V_ERR("Host TSC Counter %x, %llx", i, h_tsc_get(i));
+                }
+            }
+        }
     }
 #endif
     if (int_no == 0x0d) {

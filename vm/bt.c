@@ -186,6 +186,9 @@ v_add_poi(struct v_page *mpage, unsigned int addr,
     poi->invalid = 0;
     poi->tree = NULL;
     poi->plan.valid = 0;
+    poi->cached_plan_done = 0;
+    poi->cached_plan_length = 0;
+    poi->cached_plan = NULL;
     mpage->poi_list = poi;
     return poi;
 }
@@ -991,46 +994,65 @@ v_bt_cache(struct v_world *world)
 {
     int i, j, total;
     struct v_poi *save_poi[H_DEBUG_MAX_BP];
-    struct v_poi_cached_tree_plan cache[BT_CACHE_CAPACITY];
+    struct v_poi_cached_tree_plan *cache;
     int cache_count = 0;
+    h_perf_tsc_begin(2);
     total = world->current_valid_bps;
-    for (i = 0; i < total; i++) {
-        save_poi[i] = world->bp_to_poi[i];
+    if (world->poi->cached_plan == NULL) {
+        world->poi->cached_plan =
+            h_raw_malloc(sizeof(struct v_poi_cached_tree_plan) *
+            BT_CACHE_CAPACITY);
     }
-    for (i = 0; i < total; i++) {
-        if (save_poi[i]->type & V_INST_CB) {
-            V_VERBOSE("(M)Recursively do %lx", save_poi[i]->addr);
-            _v_bt_cache(world, save_poi[i], 0, cache, &cache_count);
+    cache = world->poi->cached_plan;
+    if (world->poi->cached_plan_done) {
+        h_bt_cache(world, cache, world->poi->cached_plan_length);
+    } else {
+        for (i = 0; i < total; i++) {
+            save_poi[i] = world->bp_to_poi[i];
         }
-        if (save_poi[i]->type & V_INST_PB) {
-            struct lru_cache_entry *find =
-                lru_cache_find32(world->pb_cache, save_poi[i]->addr);
-            if (find != NULL) {
-                struct cache_target_payload *payload =
-                    (struct cache_target_payload *) (find->payload);
-                for (j = 0; j < payload->total; j++) {
-                    unsigned long possible_ip = payload->targets[j];
-                    unsigned long phys = g_v2p(world, possible_ip, 1);
-                    struct v_page *mpage = h_p2mp(world, phys);
-                    struct v_poi *possible_poi;
-                    if (mpage == NULL)
-                        continue;
-                    possible_poi = v_find_poi(mpage, possible_ip);
-                    if (possible_poi == NULL)
-                        continue;
-                    V_VERBOSE("Found poi %lx for %lx", possible_poi->addr,
-                        save_poi[i]->addr);
-                    _v_bt_cache(world, possible_poi, 0, cache, &cache_count);
+        for (i = 0; i < total; i++) {
+            if (save_poi[i]->type & V_INST_CB) {
+                V_VERBOSE("(M)Recursively do %lx", save_poi[i]->addr);
+                _v_bt_cache(world, save_poi[i], 0, cache, &cache_count);
+            }
+            if (save_poi[i]->type & V_INST_PB) {
+                struct lru_cache_entry *find =
+                    lru_cache_find32(world->pb_cache, save_poi[i]->addr);
+                if (find != NULL) {
+                    struct cache_target_payload *payload =
+                        (struct cache_target_payload *) (find->payload);
+                    for (j = 0; j < payload->total; j++) {
+                        unsigned long possible_ip = payload->targets[j];
+                        unsigned long phys = g_v2p(world, possible_ip, 1);
+                        struct v_page *mpage = h_p2mp(world, phys);
+                        struct v_poi *possible_poi;
+                        if (mpage == NULL)
+                            continue;
+                        possible_poi = v_find_poi(mpage, possible_ip);
+                        if (possible_poi == NULL)
+                            continue;
+                        V_VERBOSE("Found poi %lx for %lx", possible_poi->addr,
+                            save_poi[i]->addr);
+                        _v_bt_cache(world, possible_poi, 0, cache,
+                            &cache_count);
+                    }
                 }
             }
         }
+        h_bt_reset(world);
+        for (i = 0; i < total; i++) {
+            v_set_bp(world, save_poi[i], i);
+        }
+        world->current_valid_bps = total;
+        h_bt_cache(world, cache, cache_count);
     }
-    h_bt_reset(world);
-    for (i = 0; i < total; i++) {
-        v_set_bp(world, save_poi[i], i);
+    h_perf_tsc_end(H_PERF_TSC_CACHE, 2);
+    if (world->poi->cached_plan_length < cache_count) {
+        world->poi->cached_plan_length = cache_count;
+    } else {
+        // considered done
+        world->poi->cached_plan_done = 1;
     }
-    world->current_valid_bps = total;
-    h_bt_cache(world, cache, cache_count);
 }
 
 #endif

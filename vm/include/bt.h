@@ -68,6 +68,11 @@ struct v_poi {
     struct v_poi *next_poi;
     struct v_poi *next_inst;
     struct v_poi *next_inst_taken;
+#ifdef BT_CACHE
+    struct v_poi_cached_tree_plan *cached_plan;
+    int cached_plan_length;
+    int cached_plan_done;
+#endif
 };
 
 struct v_ipoi {

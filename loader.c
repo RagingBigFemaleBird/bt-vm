@@ -270,6 +270,7 @@ struct vm_operations_struct btc_vm_ops = {
 };
 
 extern unsigned int bpaddr;
+extern int usermode_tests_reset;
 
 #ifdef CONFIG_X86
 int
@@ -355,6 +356,7 @@ btc_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
         g_disk_length = 0;
         len = 0;
         ret = 0;
+        usermode_tests_reset = 1;
         break;
 
     default:

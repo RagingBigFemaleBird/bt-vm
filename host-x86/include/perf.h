@@ -35,9 +35,10 @@
 #define H_PERF_TSC_TRANSLATE 6
 #define H_PERF_TSC_MINUS_FI 7
 #define H_PERF_TSC_TREE 8
+#define H_PERF_TSC_CACHE 9
 
 #define H_PERF_COUNT 6
-#define H_TSC_COUNT 9
+#define H_TSC_COUNT 10
 
 void h_perf_inc(int, long long);
 void h_perf_init(void);

@@ -4,7 +4,7 @@ btc-objs := loader.o host/mm.o host/cpu.o vm/world.o host/world.o guest/world.o 
 ifeq (${ARCH}, x86)
 	btc-objs += guest/dev/fb.o guest/dev/pic.o guest/dev/fdc.o guest/dev/dma.o guest/dev/kb.o
 	C_OPTION += -C /lib/modules/$(shell uname -r)/build
-	EXTRA_CFLAGS += -fno-pic -Wall
+	EXTRA_CFLAGS += -fno-pic -Wall -O3
 	SDIRS := $(PWD)
 endif
 ifeq (${ARCH}, arm)

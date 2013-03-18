@@ -45,6 +45,9 @@ h_perf_init(void)
     for (i = 0; i < H_PERF_COUNT; i++) {
         h_perf_counters[i] = 0;
     }
+    for (i = 0; i < H_TSC_COUNT; i++) {
+        h_tsc_counters[i] = 0;
+    }
 }
 
 static long long volatile last_tsc[3];
