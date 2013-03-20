@@ -42,8 +42,8 @@ extern unsigned long g_disk_length;
 int
 g_init_image(struct v_world *world, g_addr_t address)
 {
-    V_ERR("Initializing image... %x", g_disk_length);
     unsigned int initrd_addr = 0x3000000;
+    V_ERR("Initializing image... %lx", g_disk_length);
     initrd_len = g_initrd_length;
     while (g_initrd_length != 0 && g_initrd_data != NULL) {
         struct v_page *mpage;

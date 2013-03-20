@@ -33,6 +33,22 @@ unsigned long h_get_bp(struct v_world *, int bp_number);
 
 struct v_poi_cached_tree_plan;
 
+#ifdef BT_CACHE
+
+struct h_bt_cache {
+    unsigned long addr;
+    unsigned int bcr[6];
+    unsigned int bvr[6];
+    struct v_poi *poi;
+};
+
+struct h_bt_pb_cache {
+    unsigned long addr;
+    struct v_poi *poi;
+};
+
 void h_bt_cache(struct v_world *, struct v_poi_cached_tree_plan *, int);
+
+#endif
 
 #endif

@@ -35,8 +35,14 @@ extern volatile int time_up;
 extern int poke;
 extern int ack_pic_once;
 int last_poke = 0;
+int usermode_tests_reset = 0;
 
 struct h_cpu hostcpu;
+
+#ifdef BT_CACHE
+static int cache_offset;
+void bt_cache_start1(void);
+#endif
 
 static void h_inject_int(struct v_world *world, unsigned int int_no);
 
@@ -88,15 +94,10 @@ h_cpu_init(void)
     hostcpu.p15_trattr &= 0x3fff;
     hostcpu.p15_trbase &= 0xffffc000;
     V_LOG("trattr: %x\n", hostcpu.p15_trattr);
-    V_LOG("entry: %x %x %x %x", h_get_map(hostcpu.p15_trbase, 0xc0000000),
-        h_get_map(hostcpu.p15_trbase, h_vector_entry),
-        h_get_map(hostcpu.p15_trbase, 0x00000000),
-        h_get_map(hostcpu.p15_trbase, 0xffff0000));
 
     hostcpu.domain = 0;
     asm volatile ("mrc p15, 0, %0, c12, c0, 0":"=r" (hostcpu.p15_vector));
     V_LOG("Vector base: %x\n", hostcpu.p14_didr);
-    V_LOG("VM Vector: %x\n", h_vector_entry);
 
     power = (void *) (0xb2000000 + 0x4a306000 + 0x1a00);
     V_LOG("Power state is %x\n", *(unsigned int *) power);
@@ -148,6 +149,7 @@ h_cpu_init(void)
     V_LOG("Try to set DSCR to: %x\n", hostcpu.p14_dscr);
     asm volatile ("mrc p14 ,0 ,%0, c0, c1, 0":"=r" (hostcpu.p14_dscr));
     V_LOG("DSCR: %x\n", hostcpu.p14_dscr);
+    cache_offset = ((void *) bt_cache_start1) - ((void *) h_switch_to1);
     return 0;
 }
 
@@ -192,16 +194,230 @@ h_flush_tlb_all(void)
     asm volatile ("dsb");
 }
 
-void
-h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *cache,
-    int count)
-{
-}
-
 #ifdef USERMODE_DEBUG
 
 static int usermode_debug = 0;
 
+#endif
+
+#ifdef BT_CACHE
+
+#define __TOTAL 0
+#define __SET 4
+#define __PB_TOTAL 8
+#define __PB_SET 12
+#define __PB_START 16
+#define __PB_ENTRIES (BT_CACHE_CAPACITY)
+#define __CB_START (__PB_START + __PB_ENTRIES * 8)
+
+void
+h_bt_squash_pb(struct v_world *world)
+{
+    void *cache = world->npage;
+    cache += cache_offset;
+    *((unsigned int *) (cache + __PB_TOTAL)) = 0;
+}
+
+void
+h_bt_cache_restore(struct v_world *world)
+{
+    void *cache = world->npage;
+    int total, set, pb_total, pb_set;
+    struct h_bt_cache *hcache;
+    struct h_bt_pb_cache *h_pb_cache;
+    cache += cache_offset;
+    total = *((unsigned int *) cache);
+    set = *((unsigned int *) (cache + __SET));
+    pb_total = *((unsigned int *) (cache + __PB_TOTAL));
+    pb_set = *((unsigned int *) (cache + __PB_SET));
+    V_VERBOSE("Total %x set %x, pb Total %x set %x", total, set, pb_total,
+        pb_set);
+    if (total != 0 && set != 0) {
+        hcache = (struct h_bt_cache *) (cache + __CB_START);
+        world->poi = hcache[total - set].poi;
+        world->poi->expect = 0;
+        V_LOG("BT restore poi to %lx", world->poi->addr);
+        world->current_valid_bps = world->poi->plan.count;
+         h_bt_reset(world);
+        for (set = 0; set < world->poi->plan.count; set++) {
+            world->bp_to_poi[set] = world->poi->plan.poi[set];
+            h_set_bp(world, world->bp_to_poi[set]->addr, set);
+        }
+    } else if (pb_total != 0 && pb_set != 0) {
+        h_pb_cache = (struct h_bt_pb_cache *) (cache + __PB_START);
+        world->poi = h_pb_cache[pb_total - pb_set].poi;
+        world->poi->expect = 1;
+        V_VERBOSE("BT restore pb poi to %lx", world->poi->addr);
+        h_bt_reset(world);
+        world->hregs.gcpu.bcr[hostcpu.number_of_breakpoints] =
+            BPC_BAS_ANY | BPC_ENABLED | BPC_MISMATCH;
+        world->hregs.gcpu.bvr[hostcpu.number_of_breakpoints] = world->poi->addr;
+    }
+    *((unsigned int *) (cache + __SET)) = 0;
+    *((unsigned int *) (cache + __PB_SET)) = 0;
+}
+
+void
+h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
+    int count)
+{
+    void *cache = world->npage;
+    struct h_bt_cache *hcache;
+    struct h_bt_pb_cache *pb_cache;
+    int i;
+    int pb_total = 0;
+    cache += cache_offset;
+    *((unsigned int *) cache) = count;
+    *((unsigned int *) (cache + __SET)) = 0;
+    *((unsigned int *) (cache + __PB_TOTAL)) = 0;
+    *((unsigned int *) (cache + __PB_SET)) = 0;
+    pb_cache = (struct h_bt_pb_cache *) (cache + __PB_START);
+    V_VERBOSE("Cache total %x", count);
+    if (count != 0) {
+        hcache = (struct h_bt_cache *) (cache + __CB_START);
+        for (i = 0; i < count; i++) {
+            int j;
+            hcache[i].poi = plan[i].poi;
+            hcache[i].addr = plan[i].addr;
+            for (j = 0; j < plan[i].plan->count; j++) {
+                hcache[i].bvr[j] = plan[i].plan->poi[j]->addr;
+                hcache[i].bcr[j] = BPC_BAS_ANY | BPC_ENABLED;
+                if ((plan[i].plan->poi[j]->type & V_INST_PB)
+                    && pb_total <= 2 * BT_CACHE_CAPACITY) {
+                    int k;
+                    for (k = 0; k < pb_total; k++) {
+                        if (pb_cache[k].addr == plan[i].plan->poi[j]->addr) {
+                            goto found;
+                        }
+                    }
+                    pb_cache[pb_total].addr = plan[i].plan->poi[j]->addr;
+                    pb_cache[pb_total].poi = plan[i].plan->poi[j];
+                    V_VERBOSE("cache %x is %lx", pb_total,
+                        pb_cache[pb_total].addr);
+                    pb_total++;
+                }
+            }
+            found:
+            for (; j < 6; j++) {
+                hcache[i].bvr[j] = 0;
+                hcache[i].bcr[j] = BPC_DISABLED;
+            }
+        }
+    }
+    for (i = 0; i < world->current_valid_bps; i++) {
+        if ((world->bp_to_poi[i]->type & V_INST_PB)
+            && pb_total <= 2 * BT_CACHE_CAPACITY) {
+            int k;
+            for (k = 0; k < pb_total; k++) {
+                if (pb_cache[k].addr == world->bp_to_poi[i]->addr) {
+                    goto found1;
+                }
+            }
+            pb_cache[pb_total].addr = world->bp_to_poi[i]->addr;
+            pb_cache[pb_total].poi = world->bp_to_poi[i];
+            V_VERBOSE("cache %x is %lx", pb_total, pb_cache[pb_total].addr);
+            pb_total++;
+          found1:
+            asm volatile ("nop");
+        }
+    }
+    *((unsigned int *) (cache + __PB_TOTAL)) = pb_total;
+}
+#endif
+
+#define STRINGIFY(tok) #tok
+
+#ifdef BT_CACHE
+#define CACHE_BT_QUICKPATH(function_no) \
+    "cmp r12, #3\n\r" \
+    "beq 10f\n\r" \
+    "9:\n\r"
+#else
+#define CACHE_BT_QUICKPATH(function_no)
+#endif
+
+#ifdef BT_CACHE
+#define CACHE_BT_REGION(function_no, cache_capacity) \
+    asm volatile ("10:"); \
+    asm volatile ("mov r11, pc"); \
+    asm volatile ("b 11f"); \
+    asm volatile (".global bt_cache_start"#function_no); \
+    asm volatile ("bt_cache_start"#function_no":"); \
+    asm volatile (".long 0"); \
+    asm volatile (".long 0"); \
+    asm volatile (".long 0"); \
+    asm volatile (".long 0"); \
+    asm volatile (".rept "STRINGIFY(cache_capacity)); \
+    asm volatile (".long 0"); \
+    asm volatile (".long 0"); \
+    asm volatile (".endr"); \
+    asm volatile (".rept "STRINGIFY(cache_capacity)); \
+    asm volatile (".long 0"); \
+    asm volatile (".long 0"); \
+    asm volatile (".long 0"); \
+    asm volatile (".long 0"); \
+    asm volatile (".long 0"); \
+    asm volatile (".long 0"); \
+    asm volatile (".long 0"); \
+    asm volatile (".long 0"); \
+    asm volatile (".long 0"); \
+    asm volatile (".long 0"); \
+    asm volatile (".long 0"); \
+    asm volatile (".long 0"); \
+    asm volatile (".long 0"); \
+    asm volatile (".long 0"); \
+    asm volatile (".endr"); \
+    asm volatile ("11:"); \
+    asm volatile ("mrc p15, 0, r0, c5, c0, 1"); /*ifsr*/\
+    asm volatile ("cmp r0, #2"); \
+    asm volatile ("bne 9b"); \
+    asm volatile ("80:"); \
+    asm volatile ("ldr r0, [r11]"); \
+    asm volatile ("ldr r1, [r11, #8]"); \
+    asm volatile ("adds r4, r0, r1"); \
+    asm volatile ("beq 9b"); \
+    asm volatile ("mov r4, #0"); \
+    asm volatile ("21:"); \
+    asm volatile ("cmp r1, #0"); \
+    asm volatile ("beq 20f"); \
+    asm volatile ("add r10, r11, #16"); \
+    asm volatile ("ldr r5, [r10, r4, lsl #3]"); \
+    asm volatile ("cmp r5, lr"); \
+    asm volatile ("beq 50f"); \
+    asm volatile ("sub r1, r1, #1"); \
+    asm volatile ("add r4, r4, #1"); \
+    asm volatile ("b 21b"); \
+    asm volatile ("20:"); \
+    asm volatile ("b 9b"); \
+    asm volatile ("50:"); \
+    asm volatile ("str r1, [r11, #12]"); \
+    asm volatile ("mov r0, #0"); \
+    asm volatile ("mcr p14, 0, r0, c0, c0, 5"); \
+    asm volatile ("mcr p14, 0, r0, c0, c0, 4"); \
+    asm volatile ("mcr p14, 0, r0, c0, c1, 5"); \
+    asm volatile ("mcr p14, 0, r0, c0, c1, 4"); \
+    asm volatile ("mcr p14, 0, r0, c0, c2, 5"); \
+    asm volatile ("mcr p14, 0, r0, c0, c2, 4"); \
+    asm volatile ("mcr p14, 0, r0, c0, c3, 5"); \
+    asm volatile ("mcr p14, 0, r0, c0, c3, 4"); \
+    asm volatile ("mcr p14, 0, r0, c0, c4, 5"); \
+    asm volatile ("mcr p14, 0, r0, c0, c4, 4"); \
+    asm volatile ("mov r0, #(1 << 22)"); \
+    asm volatile ("add r0, r0, #(1 << 8)"); \
+    asm volatile ("add r0, r0, #0xe5"); \
+    asm volatile ("mcr p14, 0, r0, c0, c5, 5"); \
+    asm volatile ("mcr p14, 0, lr, c0, c5, 4"); \
+    asm volatile ("ldmia r13, {r0-r14}^"); \
+    asm volatile ("movs pc, lr");
+#else
+#define CACHE_BT_REGION
+#endif
+
+
+#ifdef BT_CACHE
+#define H_BT_CACHE_RESTORE(w) h_bt_cache_restore(w);
+#else
+#define H_BT_CACHE_RESTORE(w)
 #endif
 
 #define H_SWITCH_TO(function_no) \
@@ -298,6 +514,7 @@ h_switch_to##function_no(unsigned long trbase, struct v_world *w) \
 /*        "h_vector_test:\n\r" "cpsie i\n\r" "1:\n\r" "b 1b\n\r"*/\
         /* world switch out here */ \
         "h_vector_return"#function_no":\n\r" \
+        CACHE_BT_QUICKPATH(function_no) \
         "mrs r0, spsr\n\t" \
 /*debug        "mov r0, #0xff\n\t"*/\
         "str r0, [r13, #116]\n\t"       /* save gcpu.cpsr (=host environment spsr) */\
@@ -346,6 +563,7 @@ h_switch_to##function_no(unsigned long trbase, struct v_world *w) \
      /*DFSR*/ asm volatile ("mrc p15, 0, %0, c5, c0, 0":"=r" (dfsr)); \
     asm volatile ("mcr p15, 0, %0, c1, c0, 0"::"r" (hostcpu.p15_ctrl)); \
     local_irq_restore(i); \
+    H_BT_CACHE_RESTORE(w); \
     v_perf_inc(V_PERF_WS, 1); \
     V_LOG("breakpoints %x %x", w->hregs.gcpu.bcr[0], w->hregs.gcpu.bvr[0]); \
     V_VERBOSE("saved banked regs: %x %x %x %x %x %x %x %x", h->hcpu.r13_fiq, \
@@ -522,6 +740,7 @@ h_switch_to##function_no(unsigned long trbase, struct v_world *w) \
     asm volatile ("mov r12, #7"); \
     asm volatile ("str r12, [r13, #72]"); \
     asm volatile ("b h_vector_return"#function_no); \
+    CACHE_BT_REGION(function_no, BT_CACHE_CAPACITY) \
     asm volatile (".ltorg"); \
     asm volatile ("skip_entrycode"#function_no":"); \
     return 0; \
@@ -1162,7 +1381,6 @@ h_do_fail_inst(struct v_world *world, unsigned long ip)
                 break;
             case 8:
                 h_perf_inc(H_PERF_TLB, 1);
-                flush_cache_all();
                 //cache op
                 if (crm == 0x7 && opc1 == 0 && opc2 == 0) {
                     goto processed;
