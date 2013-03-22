@@ -186,9 +186,8 @@ v_add_poi(struct v_page *mpage, unsigned int addr,
     poi->invalid = 0;
     poi->tree = NULL;
     poi->plan.valid = 0;
-    poi->cached_plan_done = 0;
-    poi->cached_plan_length = 0;
     poi->cached_plan = NULL;
+    poi->invalidate_cached_plan = NULL;
     mpage->poi_list = poi;
     return poi;
 }
@@ -716,7 +715,7 @@ void
 v_update_pb_cache(struct v_world *world, unsigned long branch,
     unsigned long dest)
 {
-    int new_entry = 0;
+    int new_entry = 0, i;
     struct lru_cache_entry *find =
         lru_cache_update32(world->pb_cache, branch, &new_entry);
     struct cache_target_payload *payload =
@@ -724,6 +723,10 @@ v_update_pb_cache(struct v_world *world, unsigned long branch,
     if (new_entry) {
         payload->total = 0;
         payload->replace = 0;
+    }
+    for (i = 0; i < payload->total; i++) {
+        if (payload->targets[i] == dest)
+            return;
     }
     if (payload->total >= BT_CACHE_TARGET_ENTRIES_TOTAL) {
         payload->targets[payload->replace] = dest;
@@ -797,6 +800,12 @@ v_do_bp(struct v_world *world, unsigned long addr, unsigned int is_step)
         if (!(ip == world->poi->addr)) {
 #ifdef BT_CACHE
             v_update_pb_cache(world, world->poi->addr, ip);
+            if (world->poi->invalidate_cached_plan != NULL
+                && world->poi->invalidate_cached_plan->length <
+                BT_CACHE_CAPACITY) {
+                world->poi->invalidate_cached_plan->done = 0;
+            }
+            V_VERBOSE("Update cache for %x is %x", world->poi->addr, ip);
 #endif
             world->poi = NULL;
             v_perf_inc(V_PERF_BT_P, 1);
@@ -923,17 +932,18 @@ v_bt(struct v_world *world)
 
 void
 _v_bt_cache(struct v_world *world, struct v_poi *poi, int depth,
-    struct v_poi_cached_tree_plan *cache, int *cache_count)
+    struct v_poi_cached_tree_plan_container *cache, int *cache_count)
 {
     int i, j, total;
     unsigned int cache_addr;
     struct v_poi *todo_poi[H_DEBUG_MAX_BP];
     if (depth >= BT_CACHE_LEVEL)
         return;
-    if (*cache_count >= BT_CACHE_CAPACITY)
+    if (*cache_count >= BT_CACHE_CAPACITY) {
         return;
+    }
     for (i = 0; i < *cache_count; i++) {
-        if (cache[i].addr == poi->addr)
+        if (cache->plan[i].addr == poi->addr)
             return;
     }
     cache_addr = poi->addr;
@@ -954,9 +964,9 @@ _v_bt_cache(struct v_world *world, struct v_poi *poi, int depth,
     for (i = 0; i < total; i++) {
         todo_poi[i] = world->bp_to_poi[i];
     }
-    cache[*cache_count].addr = cache_addr;
-    cache[*cache_count].plan = &poi->plan;
-    cache[*cache_count].poi = poi;
+    cache->plan[*cache_count].addr = cache_addr;
+    cache->plan[*cache_count].plan = &poi->plan;
+    cache->plan[*cache_count].poi = poi;
     *cache_count = (*cache_count) + 1;
     for (i = 0; i < total; i++) {
         if (todo_poi[i]->type & V_INST_CB) {
@@ -966,6 +976,10 @@ _v_bt_cache(struct v_world *world, struct v_poi *poi, int depth,
         if (todo_poi[i]->type & V_INST_PB) {
             struct lru_cache_entry *find =
                 lru_cache_find32(world->pb_cache, todo_poi[i]->addr);
+            if (todo_poi[i]->invalidate_cached_plan != cache
+                && todo_poi[i]->invalidate_cached_plan != NULL)
+                todo_poi[i]->invalidate_cached_plan->done = 0;
+            todo_poi[i]->invalidate_cached_plan = cache;
             if (find != NULL) {
                 struct cache_target_payload *payload =
                     (struct cache_target_payload *) (find->payload);
@@ -994,22 +1008,53 @@ v_bt_cache(struct v_world *world)
 {
     int i, j, total;
     struct v_poi *save_poi[H_DEBUG_MAX_BP];
-    struct v_poi_cached_tree_plan *cache;
+    struct v_poi_cached_tree_plan_container *cache;
     int cache_count = 0;
     h_perf_tsc_begin(2);
     total = world->current_valid_bps;
     if (world->poi->cached_plan == NULL) {
-        world->poi->cached_plan =
+        struct v_poi_cached_tree_plan *plan =
             h_raw_malloc(sizeof(struct v_poi_cached_tree_plan) *
             BT_CACHE_CAPACITY);
+        world->poi->cached_plan =
+            h_raw_malloc(sizeof(struct v_poi_cached_tree_plan_container));
+        world->poi->cached_plan->plan = plan;
+        world->poi->cached_plan->done = 0;
     }
     cache = world->poi->cached_plan;
-    if (world->poi->cached_plan_done) {
-        h_bt_cache(world, cache, world->poi->cached_plan_length);
+    if (cache->done == 1) {
+        h_bt_cache(world, cache->plan, cache->length);
     } else {
         for (i = 0; i < total; i++) {
             save_poi[i] = world->bp_to_poi[i];
         }
+        if (world->poi->type & V_INST_PB) {
+            struct lru_cache_entry *find =
+                lru_cache_find32(world->pb_cache, world->poi->addr);
+            if (world->poi->invalidate_cached_plan != cache
+                && world->poi->invalidate_cached_plan != NULL)
+                world->poi->invalidate_cached_plan->done = 0;
+            world->poi->invalidate_cached_plan = cache;
+            if (find != NULL) {
+                struct cache_target_payload *payload =
+                    (struct cache_target_payload *) (find->payload);
+                for (j = 0; j < payload->total; j++) {
+                    unsigned long possible_ip = payload->targets[j];
+                    unsigned long phys = g_v2p(world, possible_ip, 1);
+                    struct v_page *mpage = h_p2mp(world, phys);
+                    struct v_poi *possible_poi;
+                    if (mpage == NULL)
+                        continue;
+                    possible_poi = v_find_poi(mpage, possible_ip);
+                    if (possible_poi == NULL)
+                        continue;
+                    V_VERBOSE("Found poi %lx for %lx", possible_poi->addr,
+                        save_poi[i]->addr);
+                    _v_bt_cache(world, possible_poi, 0, cache, &cache_count);
+                }
+            }
+        }
+
         for (i = 0; i < total; i++) {
             if (save_poi[i]->type & V_INST_CB) {
                 V_VERBOSE("(M)Recursively do %lx", save_poi[i]->addr);
@@ -1018,6 +1063,10 @@ v_bt_cache(struct v_world *world)
             if (save_poi[i]->type & V_INST_PB) {
                 struct lru_cache_entry *find =
                     lru_cache_find32(world->pb_cache, save_poi[i]->addr);
+                if (save_poi[i]->invalidate_cached_plan != cache
+                    && save_poi[i]->invalidate_cached_plan != NULL)
+                    save_poi[i]->invalidate_cached_plan->done = 0;
+                save_poi[i]->invalidate_cached_plan = cache;
                 if (find != NULL) {
                     struct cache_target_payload *payload =
                         (struct cache_target_payload *) (find->payload);
@@ -1044,14 +1093,12 @@ v_bt_cache(struct v_world *world)
             v_set_bp(world, save_poi[i], i);
         }
         world->current_valid_bps = total;
-        h_bt_cache(world, cache, cache_count);
+        h_bt_cache(world, cache->plan, cache_count);
     }
     h_perf_tsc_end(H_PERF_TSC_CACHE, 2);
-    if (world->poi->cached_plan_length < cache_count) {
-        world->poi->cached_plan_length = cache_count;
-    } else {
-        // considered done
-        world->poi->cached_plan_done = 1;
+    if (cache_count > 0) {
+        cache->done = 1;
+        cache->length = cache_count;
     }
 }
 

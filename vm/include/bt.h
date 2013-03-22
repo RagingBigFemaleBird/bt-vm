@@ -39,7 +39,7 @@ struct v_poi_tree_plan {
 };
 #define BT_CACHE
 #define BT_CACHE_LEVEL 16
-#define BT_CACHE_CAPACITY 16
+#define BT_CACHE_CAPACITY 32
 #define BT_CACHE_PB_COUNT 16
 #define BT_CACHE_TARGET_ENTRIES_TOTAL 4
 
@@ -53,6 +53,12 @@ struct v_poi_cached_tree_plan {
     unsigned long addr;
     struct v_poi *poi;
     struct v_poi_tree_plan *plan;
+};
+
+struct v_poi_cached_tree_plan_container {
+    int done;
+    int length;
+    struct v_poi_cached_tree_plan *plan;
 };
 
 struct v_poi {
@@ -69,9 +75,8 @@ struct v_poi {
     struct v_poi *next_inst;
     struct v_poi *next_inst_taken;
 #ifdef BT_CACHE
-    struct v_poi_cached_tree_plan *cached_plan;
-    int cached_plan_length;
-    int cached_plan_done;
+    struct v_poi_cached_tree_plan_container *cached_plan;
+    struct v_poi_cached_tree_plan_container *invalidate_cached_plan;
 #endif
 };
 

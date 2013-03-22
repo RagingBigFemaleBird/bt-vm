@@ -30,16 +30,15 @@ lru_stamp(void)
 struct lru_cache_entry *
 lru_cache_find32(struct lru_cache *cache, unsigned int key32)
 {
-    int i;
     void *body = cache->body;
     unsigned int unit_size =
         cache->payload_size + sizeof(struct lru_cache_entry);
-    for (i = 0; i < cache->used; i++) {
-        if (((struct lru_cache_entry *) (body + unit_size * i))->key32 == key32) {
-            ((struct lru_cache_entry *) (body + unit_size * i))->timestamp =
-                lru_stamp();
-            return ((struct lru_cache_entry *) (body + unit_size * i));
-        }
+    int position = key32 % cache->total;
+    if (((struct lru_cache_entry *) (body + unit_size * position))->key32 ==
+        key32) {
+        ((struct lru_cache_entry *) (body + unit_size * position))->timestamp =
+            lru_stamp();
+        return ((struct lru_cache_entry *) (body + unit_size * position));
     }
     return NULL;
 }
@@ -47,11 +46,11 @@ lru_cache_find32(struct lru_cache *cache, unsigned int key32)
 struct lru_cache_entry *
 lru_cache_update32(struct lru_cache *cache, unsigned int key32, int *new_entry)
 {
-    int i, replace, replace_ts;
     struct lru_cache_entry *ret;
     void *body = cache->body;
     unsigned int unit_size =
         cache->payload_size + sizeof(struct lru_cache_entry);
+    int position = key32 % cache->total;
     ret = lru_cache_find32(cache, key32);
     if (ret != NULL) {
         V_VERBOSE("Found cache");
@@ -59,39 +58,13 @@ lru_cache_update32(struct lru_cache *cache, unsigned int key32, int *new_entry)
         return ret;
     }
     *new_entry = 1;
-    if (cache->used < cache->total) {
-        ((struct lru_cache_entry *) (body + unit_size * cache->used))->key32 =
-            key32;
-        ((struct lru_cache_entry *) (body +
-                unit_size * cache->used))->timestamp = lru_stamp();
-        ((struct lru_cache_entry *) (body + unit_size * cache->used))->flags =
-            0;
-        ((struct lru_cache_entry *) (body +
-                unit_size * cache->used))->frequency = 1;
-        V_VERBOSE("Used cache %x", cache->used);
-        cache->used++;
-        return (struct lru_cache_entry *) (body + unit_size * (cache->used -
-                1));
-    }
-    replace = 0;
-    replace_ts = 0xffffffff;
-    for (i = 0; i < cache->total; i++) {
-        V_VERBOSE("Timestamp for %x is %x", i,
-            ((struct lru_cache_entry *) (body + unit_size * i))->timestamp);
-        if (((struct lru_cache_entry *) (body + unit_size * i))->timestamp <
-            replace_ts) {
-            replace_ts =
-                ((struct lru_cache_entry *) (body + unit_size * i))->timestamp;
-            replace = i;
-        }
-    }
-    V_VERBOSE("Replaced cache %x", replace);
-    ((struct lru_cache_entry *) (body + unit_size * replace))->key32 = key32;
-    ((struct lru_cache_entry *) (body + unit_size * replace))->timestamp =
+    V_VERBOSE("Replaced cache %x", position);
+    ((struct lru_cache_entry *) (body + unit_size * position))->key32 = key32;
+    ((struct lru_cache_entry *) (body + unit_size * position))->timestamp =
         lru_stamp();
-    ((struct lru_cache_entry *) (body + unit_size * replace))->flags = 0;
-    ((struct lru_cache_entry *) (body + unit_size * replace))->frequency = 1;
-    return (struct lru_cache_entry *) (body + unit_size * replace);
+    ((struct lru_cache_entry *) (body + unit_size * position))->flags = 0;
+    ((struct lru_cache_entry *) (body + unit_size * position))->frequency = 1;
+    return (struct lru_cache_entry *) (body + unit_size * position);
 }
 
 struct lru_cache *
@@ -101,8 +74,15 @@ lru_cache_init(unsigned int total, unsigned int payload_size)
         sizeof(struct lru_cache) + total * (payload_size +
         sizeof(struct lru_cache_entry));
     struct lru_cache *mem = (struct lru_cache *) h_raw_malloc(total_size);
+    void *body;
+    unsigned int unit_size = payload_size + sizeof(struct lru_cache_entry);
+    int i;
     mem->used = 0;
     mem->total = total;
     mem->payload_size = payload_size;
+    body = mem->body;
+    for (i = 0; i < mem->total; i++) {
+        ((struct lru_cache_entry *) (body + unit_size * i))->key32 = 0;
+    }
     return mem;
 }

@@ -246,8 +246,10 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
 }
 #endif
 
+#define STRINGIFY(tok) #tok
+
 #ifdef BT_CACHE
-#define CACHE_BT_CACHE \
+#define CACHE_BT_CACHE(cache_capacity) \
     asm volatile ("9:"); \
     asm volatile ("push $0xbeef"); \
     asm volatile ("sub $4, %esp"); \
@@ -261,11 +263,11 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
     asm volatile (".long 0"); \
     asm volatile (".long 0"); \
     asm volatile (".long 0"); \
-    asm volatile (".rept 32"); \
+    asm volatile (".rept 2 *"STRINGIFY(cache_capacity)); \
     asm volatile (".long 0"); \
     asm volatile (".long 0"); \
     asm volatile (".endr"); \
-    asm volatile (".rept 16"); \
+    asm volatile (".rept "STRINGIFY(cache_capacity)); \
     asm volatile (".long 0"); \
     asm volatile (".long 0"); \
     asm volatile (".long 0"); \
@@ -286,7 +288,7 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
     asm volatile ("mov %ss:52(%esp), %ecx"); \
     asm volatile ("and $0xfffefeff, %ecx"); \
     asm volatile ("mov %ecx, %ss:52(%esp)"); \
-    asm volatile ("mov %ss:48(%esp), %ecx"); \
+    asm volatile ("mov %ss:44(%esp), %ecx"); \
     asm volatile ("jmp 24f"); \
     asm volatile ("60:"); \
     asm volatile ("test $1, %ecx"); \
@@ -323,7 +325,7 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
     asm volatile ("test %edx, %edx"); \
     asm volatile ("jz 8b"); \
     asm volatile ("mov %eax, %ebx"); /*edx must be preserved all the way here*/\
-    asm volatile ("add $272, %ebx"); /* __CB_START*/\
+    asm volatile ("add $("STRINGIFY(cache_capacity)"*16 + 16), %ebx"); /* __CB_START*/\
     asm volatile ("20:"); \
     asm volatile ("mov %cs:(%ebx), %esi"); \
     asm volatile ("cmp %esi, %ecx"); \
@@ -368,7 +370,7 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
     asm volatile ("iret"); \
     asm volatile ("jmp 8b");
 #else
-#define CACHE_BT_CACHE
+#define CACHE_BT_CACHE(cache_capacity)
 #endif
 
 #ifdef BT_CACHE
@@ -663,7 +665,7 @@ h_switcher(unsigned long trbase, struct v_world *w)
 
     asm volatile ("jmp 6f");
     asm volatile ("7:");
-    CACHE_BT_CACHE;
+    CACHE_BT_CACHE(BT_CACHE_CAPACITY);
     GP_FAULT_QUICKPATH_HANDLER;
     asm volatile (".balign 32");
     asm volatile (".global trap_start");
