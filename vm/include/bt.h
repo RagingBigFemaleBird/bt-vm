@@ -42,6 +42,7 @@ struct v_poi_tree_plan {
 #define BT_CACHE_CAPACITY 32
 #define BT_CACHE_PB_COUNT 16
 #define BT_CACHE_TARGET_ENTRIES_TOTAL 4
+#define BT_CACHE_INVALIDATE_ENTRIES_COUNT 4
 
 struct cache_target_payload {
     unsigned int total;
@@ -76,7 +77,9 @@ struct v_poi {
     struct v_poi *next_inst_taken;
 #ifdef BT_CACHE
     struct v_poi_cached_tree_plan_container *cached_plan;
-    struct v_poi_cached_tree_plan_container *invalidate_cached_plan;
+    struct v_poi_cached_tree_plan_container
+     *invalidate_cached_plan[BT_CACHE_INVALIDATE_ENTRIES_COUNT];
+    int invalidate_cached_plan_count;
 #endif
 };
 
