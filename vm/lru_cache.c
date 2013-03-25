@@ -34,11 +34,11 @@ lru_cache_find32(struct lru_cache *cache, unsigned int key32)
     unsigned int unit_size =
         cache->payload_size + sizeof(struct lru_cache_entry);
     int position = key32 % cache->total;
-    if (((struct lru_cache_entry *) (body + unit_size * position))->key32 ==
-        key32) {
-        ((struct lru_cache_entry *) (body + unit_size * position))->timestamp =
-            lru_stamp();
-        return ((struct lru_cache_entry *) (body + unit_size * position));
+    struct lru_cache_entry *entry =
+        (struct lru_cache_entry *) (body + unit_size * position);
+    if (entry->key32 == key32) {
+        entry->timestamp = lru_stamp();
+        return entry;
     }
     return NULL;
 }
@@ -51,6 +51,7 @@ lru_cache_update32(struct lru_cache *cache, unsigned int key32, int *new_entry)
     unsigned int unit_size =
         cache->payload_size + sizeof(struct lru_cache_entry);
     int position = key32 % cache->total;
+    struct lru_cache_entry *entry;
     ret = lru_cache_find32(cache, key32);
     if (ret != NULL) {
         V_VERBOSE("Found cache");
@@ -58,13 +59,12 @@ lru_cache_update32(struct lru_cache *cache, unsigned int key32, int *new_entry)
         return ret;
     }
     *new_entry = 1;
-    V_VERBOSE("Replaced cache %x", position);
-    ((struct lru_cache_entry *) (body + unit_size * position))->key32 = key32;
-    ((struct lru_cache_entry *) (body + unit_size * position))->timestamp =
-        lru_stamp();
-    ((struct lru_cache_entry *) (body + unit_size * position))->flags = 0;
-    ((struct lru_cache_entry *) (body + unit_size * position))->frequency = 1;
-    return (struct lru_cache_entry *) (body + unit_size * position);
+    entry = (struct lru_cache_entry *) (body + unit_size * position);
+    entry->key32 = key32;
+    entry->timestamp = lru_stamp();
+    entry->flags = 0;
+    entry->frequency = 1;
+    return entry;
 }
 
 struct lru_cache *

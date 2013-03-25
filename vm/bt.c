@@ -802,10 +802,13 @@ v_do_bp(struct v_world *world, unsigned long addr, unsigned int is_step)
             v_update_pb_cache(world, world->poi->addr, ip);
             if (world->poi->invalidate_cached_plan_count > 0) {
                 int r;
-                for (r = 0; r < BT_CACHE_INVALIDATE_ENTRIES_COUNT; r++) {
+                for (r = 0; r < world->poi->invalidate_cached_plan_count; r++) {
                     if (world->poi->invalidate_cached_plan[r]->length <
                         BT_CACHE_CAPACITY) {
-                        V_ERR("Invalidate");
+#ifdef __DEBUG_BT_CACHE
+                        V_ERR("Invalidate %x",
+                            world->poi->invalidate_cached_plan[r]);
+#endif
                         world->poi->invalidate_cached_plan[r]->done = 0;
                     }
                 }
@@ -987,19 +990,20 @@ _v_bt_cache(struct v_world *world, struct v_poi *poi, int depth,
                         goto found;
                     }
                 }
-                if (todo_poi[i]->invalidate_cached_plan_count >=
-                    BT_CACHE_INVALIDATE_ENTRIES_COUNT) {
-                    V_ERR("Replacement eviction");
-                    for (r = 0; r < todo_poi[i]->invalidate_cached_plan_count;
-                        r++) {
-                        todo_poi[i]->invalidate_cached_plan[r]->done = 0;
-                    }
-                    todo_poi[i]->invalidate_cached_plan_count = 0;
-                }
-                todo_poi[i]->
-                    invalidate_cached_plan[todo_poi
-                    [i]->invalidate_cached_plan_count++] = cache;
             }
+            if (todo_poi[i]->invalidate_cached_plan_count >=
+                BT_CACHE_INVALIDATE_ENTRIES_COUNT) {
+                for (r = 0; r < todo_poi[i]->invalidate_cached_plan_count; r++) {
+                    todo_poi[i]->invalidate_cached_plan[r]->done = 0;
+#ifdef __DEBUG_BT_CACHE
+                    V_ERR("Replacement eviction %p",
+                        todo_poi[i]->invalidate_cached_plan[r]);
+#endif
+                }
+                todo_poi[i]->invalidate_cached_plan_count = 0;
+            }
+            todo_poi[i]->invalidate_cached_plan[todo_poi
+                [i]->invalidate_cached_plan_count++] = cache;
           found:
             if (find != NULL) {
                 struct cache_target_payload *payload =
@@ -1024,6 +1028,9 @@ _v_bt_cache(struct v_world *world, struct v_poi *poi, int depth,
     }
 }
 
+#ifdef __DEBUG_BT_CACHE
+unsigned int lastcache = 0;
+#endif
 void
 v_bt_cache(struct v_world *world)
 {
@@ -1043,33 +1050,43 @@ v_bt_cache(struct v_world *world)
         world->poi->cached_plan->done = 0;
     }
     cache = world->poi->cached_plan;
-    if (cache->done == 1) {
+    if (cache->done) {
         h_bt_cache(world, cache->plan, cache->length);
     } else {
+#ifdef __DEBUG_BT_CACHE
+        if (lastcache == cache)
+            V_ERR("%p staring", cache);
+#endif
         for (i = 0; i < total; i++) {
             save_poi[i] = world->bp_to_poi[i];
         }
         if (world->poi->type & V_INST_PB) {
             struct lru_cache_entry *find =
                 lru_cache_find32(world->pb_cache, world->poi->addr);
+#ifdef __DEBUG_BT_CACHE
+            if (lastcache == cache)
+                V_ERR("Root pb %x", world->poi->addr);
+#endif
             if (world->poi->invalidate_cached_plan_count > 0) {
                 for (r = 0; r < world->poi->invalidate_cached_plan_count; r++) {
                     if (world->poi->invalidate_cached_plan[r] == cache) {
                         goto found2;
                     }
                 }
-                if (world->poi->invalidate_cached_plan_count >=
-                    BT_CACHE_INVALIDATE_ENTRIES_COUNT) {
-                    V_ERR("Replacement eviction");
-                    for (r = 0; r < world->poi->invalidate_cached_plan_count;
-                        r++) {
-                        world->poi->invalidate_cached_plan[r]->done = 0;
-                    }
-                    world->poi->invalidate_cached_plan_count = 0;
-                }
-                world->poi->invalidate_cached_plan[world->
-                    poi->invalidate_cached_plan_count++] = cache;
             }
+            if (world->poi->invalidate_cached_plan_count >=
+                BT_CACHE_INVALIDATE_ENTRIES_COUNT) {
+                for (r = 0; r < world->poi->invalidate_cached_plan_count; r++) {
+#ifdef __DEBUG_BT_CACHE
+                    V_ERR("Replacement eviction %p",
+                        world->poi->invalidate_cached_plan[r]);
+#endif
+                    world->poi->invalidate_cached_plan[r]->done = 0;
+                }
+                world->poi->invalidate_cached_plan_count = 0;
+            }
+            world->poi->invalidate_cached_plan[world->
+                poi->invalidate_cached_plan_count++] = cache;
           found2:
             if (find != NULL) {
                 struct cache_target_payload *payload =
@@ -1099,6 +1116,10 @@ v_bt_cache(struct v_world *world)
             if (save_poi[i]->type & V_INST_PB) {
                 struct lru_cache_entry *find =
                     lru_cache_find32(world->pb_cache, save_poi[i]->addr);
+#ifdef __DEBUG_BT_CACHE
+                if (lastcache == cache)
+                    V_ERR("pb %x", save_poi[i]->addr);
+#endif
                 if (save_poi[i]->invalidate_cached_plan_count > 0) {
                     for (r = 0; r < save_poi[i]->invalidate_cached_plan_count;
                         r++) {
@@ -1106,20 +1127,21 @@ v_bt_cache(struct v_world *world)
                             goto found;
                         }
                     }
-                    if (save_poi[i]->invalidate_cached_plan_count >=
-                        BT_CACHE_INVALIDATE_ENTRIES_COUNT) {
-                        V_ERR("Replacement eviction");
-                        for (r = 0;
-                            r < save_poi[i]->invalidate_cached_plan_count;
-                            r++) {
-                            save_poi[i]->invalidate_cached_plan[r]->done = 0;
-                        }
-                        save_poi[i]->invalidate_cached_plan_count = 0;
-                    }
-                    save_poi[i]->
-                        invalidate_cached_plan[save_poi
-                        [i]->invalidate_cached_plan_count++] = cache;
                 }
+                if (save_poi[i]->invalidate_cached_plan_count >=
+                    BT_CACHE_INVALIDATE_ENTRIES_COUNT) {
+                    for (r = 0;
+                        r < save_poi[i]->invalidate_cached_plan_count; r++) {
+#ifdef __DEBUG_BT_CACHE
+                        V_ERR("Replacement eviction %p",
+                            save_poi[i]->invalidate_cached_plan[r]);
+#endif
+                        save_poi[i]->invalidate_cached_plan[r]->done = 0;
+                    }
+                    save_poi[i]->invalidate_cached_plan_count = 0;
+                }
+                save_poi[i]->invalidate_cached_plan[save_poi
+                    [i]->invalidate_cached_plan_count++] = cache;
               found:
                 if (find != NULL) {
                     struct cache_target_payload *payload =
@@ -1148,12 +1170,19 @@ v_bt_cache(struct v_world *world)
         }
         world->current_valid_bps = total;
         h_bt_cache(world, cache->plan, cache_count);
+#ifdef __DEBUG_BT_CACHE
+        if (lastcache == cache)
+            V_ERR("%x", cache_count);
+#endif
+        if (cache_count > 0) {
+            cache->done = 1;
+            cache->length = cache_count;
+        }
+#ifdef __DEBUG_BT_CACHE
+        lastcache = cache;
+#endif
     }
     h_perf_tsc_end(H_PERF_TSC_CACHE, 2);
-    if (cache_count > 0) {
-        cache->done = 1;
-        cache->length = cache_count;
-    }
 }
 
 #endif
