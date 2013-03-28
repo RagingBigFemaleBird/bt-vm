@@ -280,7 +280,7 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
     asm volatile ("mov %cs:8(%eax), %ecx"); \
     asm volatile ("mov %edx, %ebx"); \
     asm volatile ("or %ecx, %ebx"); \
-    asm volatile ("je 8b"); \
+    asm volatile ("je 98f"); \
     asm volatile ("mov %dr6, %ecx"); \
     asm volatile ("mov %ecx, %edi"); /* KEEP EDI ALL THE WAY */\
     asm volatile ("and $0x4000, %edi"); \
@@ -349,6 +349,9 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
     asm volatile ("mov %eax, %dr2"); \
     asm volatile ("mov %cs:20(%ebx), %eax"); \
     asm volatile ("mov %eax, %dr3"); \
+    asm volatile ("mov %dr6, %eax"); \
+    asm volatile ("and $0xffff0ff0, %eax"); \
+    asm volatile ("mov %eax, %dr6"); \
     asm volatile ("popa"); \
     asm volatile ("add $12, %esp"); \
     asm volatile ("iret"); \
@@ -368,7 +371,15 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
     asm volatile ("popa"); \
     asm volatile ("add $12, %esp"); \
     asm volatile ("iret"); \
+    asm volatile ("98:"); \
+    asm volatile ("mov %ss:44(%esp), %ecx"); \
+    asm volatile ("cmp $0xc0108715, %ecx"); \
+    asm volatile ("je 200f"); \
+    asm volatile ("jmp 8b"); \
     asm volatile ("99:"); \
+    asm volatile ("mov %ss:44(%esp), %ecx"); \
+    asm volatile ("cmp $0xc0108715, %ecx"); \
+    asm volatile ("je 200f"); \
     asm volatile ("test %edi, %edi"); \
     asm volatile ("jnz 8b"); \
     asm volatile ("jmp 200f");
@@ -451,16 +462,11 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
     asm volatile ("cmp $0xcf, %cl"); \
     asm volatile ("jne 122f"); \
     asm volatile ("mov %ss:56(%esp), %ebx"); /*get guest esp*/\
-    asm volatile ("mov %ss:4(%ebx), %edx"); \
-    asm volatile ("mov %edx, %esi"); /*compare cs: must be (rpl3)*/\
-    asm volatile ("and $3, %esi"); \
-    asm volatile ("cmp $3, %esi"); \
+    asm volatile ("mov %ss:4(%ebx), %edi"); /*compare cs: must be (rpl3)*/\
+    asm volatile ("and $3, %edi"); \
+    asm volatile ("cmp $3, %edi"); \
     asm volatile ("jne 122f"); \
-    asm volatile ("mov %ss:16(%ebx), %edx"); \
-    asm volatile ("mov %edx, %esi"); /*compare ss: must be (rpl3)*/\
-    asm volatile ("and $3, %esi"); \
-    asm volatile ("cmp $3, %esi"); \
-    asm volatile ("jne 122f"); \
+    /*note: we are not comparing ss, potential bug*/\
     asm volatile ("mov %ss:(%ebx), %edx"); \
     asm volatile ("mov %edx, %ss:44(%esp)"); \
     asm volatile ("mov %ss:4(%ebx), %edx"); \
@@ -468,6 +474,7 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
     asm volatile ("mov %ss:12(%ebx), %edx"); \
     asm volatile ("mov %edx, %ss:56(%esp)"); \
     asm volatile ("mov %ss:16(%ebx), %edx"); \
+    asm volatile ("or $3, %edx"); \
     asm volatile ("mov %edx, %ss:60(%esp)"); \
     asm volatile ("mov %ss:8(%ebx), %esi"); \
     asm volatile ("mov %esi, %edi"); \
