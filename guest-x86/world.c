@@ -114,6 +114,7 @@ g_world_init(struct v_world *w, unsigned long pages)
     w->gregs.dev.cmos.latch = 0;
     w->gregs.dev.cmos.ff = 0;
     w->gregs.dev.cmos.cmd = 0xff;
+    w->gregs.fast_iret_possible = 0;
 
     g_fb_init(w, 0xb8000);
     g_fb_init(w, 0xb9000);

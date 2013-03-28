@@ -254,9 +254,7 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
     asm volatile ("push $0xbeef"); \
     asm volatile ("sub $4, %esp"); \
     asm volatile ("pusha"); \
-    asm volatile ("mov $bt_cache_start, %eax"); \
-    asm volatile ("jmp 10f"); \
-    asm volatile (".balign 4"); \
+    asm volatile ("call 10f"); \
     asm volatile (".global bt_cache_start"); \
     asm volatile ("bt_cache_start:"); \
     asm volatile (".long 0"); \
@@ -277,12 +275,15 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
     asm volatile (".long 0"); \
     asm volatile (".endr"); \
     asm volatile ("10:"); \
+    asm volatile ("pop %eax"); \
     asm volatile ("mov %cs:(%eax), %edx"); \
     asm volatile ("mov %cs:8(%eax), %ecx"); \
     asm volatile ("mov %edx, %ebx"); \
     asm volatile ("or %ecx, %ebx"); \
     asm volatile ("je 8b"); \
     asm volatile ("mov %dr6, %ecx"); \
+    asm volatile ("mov %ecx, %edi"); /* KEEP EDI ALL THE WAY */\
+    asm volatile ("and $0x4000, %edi"); \
     asm volatile ("test $0x4000, %ecx"); \
     asm volatile ("jz 60f"); \
     asm volatile ("mov %ss:52(%esp), %ecx"); \
@@ -307,23 +308,23 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
     asm volatile ("jmp 24f"); \
     asm volatile ("23:"); \
     asm volatile ("test $8, %ecx"); \
-    asm volatile ("jne 8b"); /*this should never happen*/\
+    asm volatile ("jne 99f"); /*this should never happen*/\
     asm volatile ("mov %dr3, %ecx"); \
     asm volatile ("24:"); \
     asm volatile ("mov %eax, %ebx"); /*edx must be preserved all the way here*/\
     asm volatile ("add $8, %ebx"); /* __PB_TOTAL*/\
-    asm volatile ("mov %cs:(%ebx), %edi"); \
-    asm volatile ("cmp $0, %edi"); \
+    asm volatile ("mov %cs:(%ebx), %esi"); \
+    asm volatile ("cmp $0, %esi"); \
     asm volatile ("je 40f"); \
     asm volatile ("41:"); \
     asm volatile ("add $8, %ebx"); /* __PB_START*/\
     asm volatile ("cmp %cs:(%ebx), %ecx"); \
     asm volatile ("je 50f"); \
-    asm volatile ("dec %edi"); \
+    asm volatile ("dec %esi"); \
     asm volatile ("jnz 41b"); \
     asm volatile ("40:"); \
     asm volatile ("test %edx, %edx"); \
-    asm volatile ("jz 8b"); \
+    asm volatile ("jz 99f"); \
     asm volatile ("mov %eax, %ebx"); /*edx must be preserved all the way here*/\
     asm volatile ("add $("STRINGIFY(cache_capacity)"*16 + 16), %ebx"); /* __CB_START*/\
     asm volatile ("20:"); \
@@ -333,7 +334,7 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
     asm volatile ("add $28, %ebx"); \
     asm volatile ("dec %edx"); \
     asm volatile ("jnz 20b"); \
-    asm volatile ("jmp 8b"); \
+    asm volatile ("jmp 99f"); \
     asm volatile ("30:"); \
     asm volatile ("mov %edx, %ss:4(%eax)"); \
     asm volatile ("xor %edx, %edx"); \
@@ -351,11 +352,10 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
     asm volatile ("popa"); \
     asm volatile ("add $12, %esp"); \
     asm volatile ("iret"); \
-    asm volatile ("jmp 8b"); \
     asm volatile ("50:"); \
-    asm volatile ("mov %edi, %ss:12(%eax)"); \
-    asm volatile ("xor %edi, %edi"); \
-    asm volatile ("mov %edi, %ss:4(%eax)"); \
+    asm volatile ("mov %esi, %ss:12(%eax)"); \
+    asm volatile ("xor %esi, %esi"); \
+    asm volatile ("mov %esi, %ss:4(%eax)"); \
     asm volatile ("mov %dr7, %eax"); \
     asm volatile ("and $0xffffff00, %eax"); \
     asm volatile ("mov %eax, %dr7"); \
@@ -368,7 +368,10 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
     asm volatile ("popa"); \
     asm volatile ("add $12, %esp"); \
     asm volatile ("iret"); \
-    asm volatile ("jmp 8b");
+    asm volatile ("99:"); \
+    asm volatile ("test %edi, %edi"); \
+    asm volatile ("jnz 8b"); \
+    asm volatile ("jmp 200f");
 #else
 #define CACHE_BT_CACHE(cache_capacity)
 #endif
@@ -396,8 +399,8 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
     asm volatile ("100:"); \
     asm volatile ("sub $4, %esp"); \
     asm volatile ("pusha"); \
-    asm volatile ("mov $sensitive_instruction_cache, %eax"); \
-    asm volatile ("jmp 110f"); \
+    asm volatile ("200:"); \
+    asm volatile ("call 110f"); \
     asm volatile (".global sensitive_instruction_cache"); \
     asm volatile ("sensitive_instruction_cache:"); \
     asm volatile (".long 0"); /*control flag */\
@@ -406,7 +409,9 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
     asm volatile (".long 0"); /*nt*/\
     asm volatile (".long 0"); /*iopl*/\
     asm volatile (".long 0"); /*int*/\
+    asm volatile (".long 0"); /*fast iret allowed*/ \
     asm volatile ("110:"); \
+    asm volatile ("pop %eax"); \
     asm volatile ("mov %cs:(%eax), %ecx"); /* eax points to control flag */\
     asm volatile ("cmp $0, %ecx"); \
     asm volatile ("je 111f"); \
@@ -440,6 +445,47 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
     asm volatile ("iret"); \
     asm volatile ("jmp 130f"); \
     asm volatile ("121:"); \
+    asm volatile ("mov %cs:24(%eax), %edx"); /* eax points to fast iret enable flag */\
+    asm volatile ("cmp $0, %edx"); \
+    asm volatile ("je 122f"); \
+    asm volatile ("cmp $0xcf, %cl"); \
+    asm volatile ("jne 122f"); \
+    asm volatile ("mov %ss:56(%esp), %ebx"); /*get guest esp*/\
+    asm volatile ("mov %ss:4(%ebx), %edx"); \
+    asm volatile ("mov %edx, %esi"); /*compare cs: must be (rpl3)*/\
+    asm volatile ("and $3, %esi"); \
+    asm volatile ("cmp $3, %esi"); \
+    asm volatile ("jne 122f"); \
+    asm volatile ("mov %ss:16(%ebx), %edx"); \
+    asm volatile ("mov %edx, %esi"); /*compare ss: must be (rpl3)*/\
+    asm volatile ("and $3, %esi"); \
+    asm volatile ("cmp $3, %esi"); \
+    asm volatile ("jne 122f"); \
+    asm volatile ("mov %ss:(%ebx), %edx"); \
+    asm volatile ("mov %edx, %ss:44(%esp)"); \
+    asm volatile ("mov %ss:4(%ebx), %edx"); \
+    asm volatile ("mov %edx, %ss:48(%esp)"); \
+    asm volatile ("mov %ss:12(%ebx), %edx"); \
+    asm volatile ("mov %edx, %ss:56(%esp)"); \
+    asm volatile ("mov %ss:16(%ebx), %edx"); \
+    asm volatile ("mov %edx, %ss:60(%esp)"); \
+    asm volatile ("mov %ss:8(%ebx), %esi"); \
+    asm volatile ("mov %esi, %edi"); \
+    asm volatile ("shr $14, %esi"); \
+    asm volatile ("and $1, %esi"); \
+    asm volatile ("shr $12, %edi"); \
+    asm volatile ("and $3, %edi"); \
+    asm volatile ("130:"); \
+    asm volatile ("movl $0x3, %ss:(%eax)"); \
+    asm volatile ("movl $0x1, %ss:20(%eax)"); \
+    asm volatile ("movl $0x3, %ss:8(%eax)"); \
+    asm volatile ("movl %esi, %ss:12(%eax)"); \
+    asm volatile ("movl %edi, %ss:16(%eax)"); \
+    asm volatile ("popa"); \
+    asm volatile ("add $12, %esp"); \
+    asm volatile ("iret"); \
+    asm volatile ("jmp 130f"); \
+    asm volatile ("122:"); \
     asm volatile ("130:"); \
     asm volatile ("111:"); \
     asm volatile ("jmp 8b");
@@ -452,6 +498,7 @@ h_gp_fault_quickpath_preamble(struct v_world *world)
 {
     void *cache = world->hregs.hcpu.switcher;
     cache += sensitive_instruction_cache_offset;
+    *((unsigned int *) (cache + 24)) = world->gregs.fast_iret_possible;
     if (world->gregs.ring == 0 && world->gregs.mode != G_MODE_REAL) {
         *((unsigned int *) (cache)) = 1;
         *((unsigned int *) (cache + 4)) = world->gregs.rf;
@@ -463,23 +510,7 @@ h_gp_fault_quickpath_preamble(struct v_world *world)
 }
 
 void
-h_gp_fault_quickpath_postprocessing(struct v_world *world)
-{
-    void *cache = world->hregs.hcpu.switcher;
-    int result;
-    cache += sensitive_instruction_cache_offset;
-    result = *((unsigned int *) (cache));
-    if (result == 2) {
-        int interrupt = *((unsigned int *) (cache + 20));
-        if (!interrupt) {
-            v_disable_int(world);
-            world->gregs.eflags &= (~H_EFLAGS_IF);
-        } else {
-            v_enable_int(world);
-            world->gregs.eflags |= (H_EFLAGS_IF);
-        }
-    }
-}
+h_gp_fault_quickpath_postprocessing(struct v_world *world);
 
 void
 h_gp_fault_quickpath_postprocessing2(struct v_world *world)
@@ -662,6 +693,8 @@ h_switcher(unsigned long trbase, struct v_world *w)
 
     asm volatile (".global restoreCS");
     asm volatile ("restoreCS:":::"memory", "cc");
+
+    h->gcpu.ds = h->gcpu.ds & 0xffff;
 
     asm volatile ("jmp 6f");
     asm volatile ("7:");
@@ -1391,6 +1424,7 @@ h_do_return(struct v_world *world, int para_count, int is_iret)
             world->status = VM_PAUSED;
             return;
         }
+        if (ring == 3) world->gregs.fast_iret_possible = 1;
         sp += 8;
         world->hregs.gcpu.esp += 8;
         if (is_iret) {
@@ -1654,7 +1688,7 @@ h_debug_sanity_check(struct v_world *world)
         world->hregs.gcpu.gs > 0x100 ||
         (world->hregs.gcpu.ss > 0x100 && world->hregs.gcpu.ss != 0x7eb) ||
         (world->gregs.cr3 & 0xfff) != 0 || world->hregs.gcpu.ldt > 0x100) {
-        V_LOG("Sanity check failed \n");
+        V_ERR("Sanity check failed \n");
         world->status = VM_PAUSED;
     }
 }
@@ -2792,6 +2826,35 @@ h_do_fail_inst(struct v_world *w, unsigned long ip)
 {
     h_gpfault(w);
 }
+
+void
+h_gp_fault_quickpath_postprocessing(struct v_world *world)
+{
+    void *cache = world->hregs.hcpu.switcher;
+    int result;
+    cache += sensitive_instruction_cache_offset;
+    result = *((unsigned int *) (cache));
+    if (result == 2 || result == 3) {
+        int interrupt = *((unsigned int *) (cache + 20));
+        if (!interrupt) {
+            v_disable_int(world);
+            world->gregs.eflags &= (~H_EFLAGS_IF);
+        } else {
+            v_enable_int(world);
+            world->gregs.eflags |= (H_EFLAGS_IF);
+        }
+    }
+    if (result == 3) {
+        int nt = *((unsigned int *) (cache + 12));
+        int iopl = *((unsigned int *) (cache + 16));
+        world->gregs.nt = nt;
+        world->gregs.iopl = iopl;
+        world->gregs.ring = 3;
+        h_update(cs, 1, 1);
+        v_bt_reset(world);
+    }
+}
+
 
 #define H_DO_INT(number) case number: asm volatile ("int $"#number); break
 static void

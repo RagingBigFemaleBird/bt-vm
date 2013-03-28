@@ -151,6 +151,7 @@ struct g_regs {
     unsigned char *sdisasm_vip;
     unsigned int zombie_cs;     //special treatment when mode changing not yet long jumped
     unsigned int zombie_jumped;
+    unsigned int fast_iret_possible;
     struct g_devices dev;
 } __attribute__ ((__packed__));
 
