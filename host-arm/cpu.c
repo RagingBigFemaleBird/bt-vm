@@ -238,7 +238,7 @@ h_bt_cache_restore(struct v_world *world)
         world->poi->expect = 0;
         V_LOG("BT restore poi to %lx", world->poi->addr);
         world->current_valid_bps = world->poi->plan.count;
-         h_bt_reset(world);
+        h_bt_reset(world);
         for (set = 0; set < world->poi->plan.count; set++) {
             world->bp_to_poi[set] = world->poi->plan.poi[set];
             h_set_bp(world, world->bp_to_poi[set]->addr, set);
@@ -297,7 +297,7 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
                     pb_total++;
                 }
             }
-            found:
+          found:
             for (; j < 6; j++) {
                 hcache[i].bvr[j] = 0;
                 hcache[i].bcr[j] = BPC_DISABLED;

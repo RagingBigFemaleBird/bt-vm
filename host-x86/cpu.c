@@ -177,6 +177,26 @@ h_bt_cache_restore(struct v_world *world)
     *((unsigned int *) (cache + __PB_SET)) = 0;
 }
 
+#define TOTAL_BT_CACHED_AREA_SIZE (16 + 8 * __PB_ENTRIES + 28 * BT_CACHE_CAPACITY)
+void
+h_bt_cache_direct(struct v_world *world,
+    struct v_poi_cached_tree_plan_container *cont)
+{
+    void *cache = world->hregs.hcpu.switcher;
+    cache += cache_offset;
+    h_memcpy(cache, cont->exec_cache, TOTAL_BT_CACHED_AREA_SIZE);
+}
+
+void
+h_bt_exec_cache(struct v_world *world,
+    struct v_poi_cached_tree_plan_container *cont)
+{
+    void *cache = world->hregs.hcpu.switcher;
+    cache += cache_offset;
+    if (cont->exec_cache == NULL) cont->exec_cache = h_raw_malloc(TOTAL_BT_CACHED_AREA_SIZE);
+    h_memcpy(cont->exec_cache, cache, TOTAL_BT_CACHED_AREA_SIZE);
+}
+
 void
 h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
     int count)
@@ -517,7 +537,7 @@ h_gp_fault_quickpath_preamble(struct v_world *world)
 }
 
 void
-h_gp_fault_quickpath_postprocessing(struct v_world *world);
+  h_gp_fault_quickpath_postprocessing(struct v_world *world);
 
 void
 h_gp_fault_quickpath_postprocessing2(struct v_world *world)
@@ -1431,7 +1451,8 @@ h_do_return(struct v_world *world, int para_count, int is_iret)
             world->status = VM_PAUSED;
             return;
         }
-        if (ring == 3) world->gregs.fast_iret_possible = 1;
+        if (ring == 3)
+            world->gregs.fast_iret_possible = 1;
         sp += 8;
         world->hregs.gcpu.esp += 8;
         if (is_iret) {

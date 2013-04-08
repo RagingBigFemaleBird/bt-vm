@@ -44,8 +44,14 @@ struct h_bt_pb_cache {
 };
 
 struct v_poi_cached_tree_plan;
+struct v_poi_cached_tree_plan_container;
+
 void h_bt_cache(struct v_world *, struct v_poi_cached_tree_plan *, int);
 void h_bt_cache_restore(struct v_world *);
 void h_bt_squash_pb(struct v_world *);
+void h_bt_cache_direct(struct v_world *,
+    struct v_poi_cached_tree_plan_container *);
+void h_bt_exec_cache(struct v_world *,
+    struct v_poi_cached_tree_plan_container *);
 
 #endif

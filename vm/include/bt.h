@@ -60,6 +60,7 @@ struct v_poi_cached_tree_plan_container {
     int done;
     int length;
     struct v_poi_cached_tree_plan *plan;
+    void *exec_cache;
 };
 
 struct v_poi {

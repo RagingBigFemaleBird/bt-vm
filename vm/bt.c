@@ -1048,10 +1048,11 @@ v_bt_cache(struct v_world *world)
             h_raw_malloc(sizeof(struct v_poi_cached_tree_plan_container));
         world->poi->cached_plan->plan = plan;
         world->poi->cached_plan->done = 0;
+        world->poi->cached_plan->exec_cache = NULL;
     }
     cache = world->poi->cached_plan;
     if (cache->done) {
-        h_bt_cache(world, cache->plan, cache->length);
+        h_bt_cache_direct(world, cache);
     } else {
 #ifdef __DEBUG_BT_CACHE
         if (lastcache == cache)
@@ -1170,6 +1171,7 @@ v_bt_cache(struct v_world *world)
         }
         world->current_valid_bps = total;
         h_bt_cache(world, cache->plan, cache_count);
+        h_bt_exec_cache(world, cache);
 #ifdef __DEBUG_BT_CACHE
         if (lastcache == cache)
             V_ERR("%x", cache_count);
