@@ -32,7 +32,7 @@
 #include "host/include/perf.h"
 #include "guest/include/bt.h"
 
-#define DEBUG_CODECONTROL
+//#define DEBUG_CODECONTROL
 
 extern volatile int step;
 extern volatile int time_up;
@@ -142,14 +142,6 @@ h_bt_cache_restore(struct v_world *world)
     set = *((unsigned int *) (cache + __SET));
     pb_total = *((unsigned int *) (cache + __PB_TOTAL));
     pb_set = *((unsigned int *) (cache + __PB_SET));
-    asm volatile ("mov %%dr0, %0":"=r" (dr7));
-    V_VERBOSE("dr0 is %x", dr7);
-    asm volatile ("mov %%dr1, %0":"=r" (dr7));
-    V_VERBOSE("dr1 is %x", dr7);
-    asm volatile ("mov %%dr2, %0":"=r" (dr7));
-    V_VERBOSE("dr2 is %x", dr7);
-    asm volatile ("mov %%dr3, %0":"=r" (dr7));
-    V_VERBOSE("dr3 is %x", dr7);
     V_VERBOSE("Total %x set %x, pb Total %x set %x", total, set, pb_total,
         pb_set);
     if (total != 0 && set != 0) {
@@ -193,7 +185,8 @@ h_bt_exec_cache(struct v_world *world,
 {
     void *cache = world->hregs.hcpu.switcher;
     cache += cache_offset;
-    if (cont->exec_cache == NULL) cont->exec_cache = h_raw_malloc(TOTAL_BT_CACHED_AREA_SIZE);
+    if (cont->exec_cache == NULL)
+        cont->exec_cache = h_raw_malloc(TOTAL_BT_CACHED_AREA_SIZE);
     h_memcpy(cont->exec_cache, cache, TOTAL_BT_CACHED_AREA_SIZE);
 }
 
@@ -791,11 +784,13 @@ h_switch_to(unsigned long trbase, struct v_world *w)
         h->gcpu.eflags |= H_EFLAGS_RF;
     else
         h->gcpu.eflags &= (~H_EFLAGS_RF);
+#ifdef DEBUG_CODECONTROL
     if (w->poi && w->poi->expect && (h->gcpu.intr & 0xff) < 0x20
         && (h->gcpu.intr & 0xff) != 0x0e && (h->gcpu.intr & 0xff) != 0x01
         && w->poi->addr == g_get_ip(w)) {
         V_ALERT("POI ip == ip but not taking BP?");
     }
+#endif
     if ((h->gcpu.intr & 0xff) == 0x01) {
         unsigned int dr;
         if ((!bp_reached) && g_get_ip(w) == bpaddr) {

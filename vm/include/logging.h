@@ -20,7 +20,7 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
 
-#define LOGLEVEL 1
+#define LOGLEVEL 0
 
 #ifdef LOGLEVEL
 

@@ -1052,7 +1052,11 @@ v_bt_cache(struct v_world *world)
     }
     cache = world->poi->cached_plan;
     if (cache->done) {
+#ifdef BT_CACHE_LEVEL3
         h_bt_cache_direct(world, cache);
+#else
+        h_bt_cache(world, cache->plan, cache->count);
+#endif
     } else {
 #ifdef __DEBUG_BT_CACHE
         if (lastcache == cache)
@@ -1171,7 +1175,9 @@ v_bt_cache(struct v_world *world)
         }
         world->current_valid_bps = total;
         h_bt_cache(world, cache->plan, cache_count);
+#ifdef BT_CACHE_LEVEL3
         h_bt_exec_cache(world, cache);
+#endif
 #ifdef __DEBUG_BT_CACHE
         if (lastcache == cache)
             V_ERR("%x", cache_count);
