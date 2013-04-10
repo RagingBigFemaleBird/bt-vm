@@ -45,6 +45,6 @@ long h_perf_get(int);
 void h_perf_tsc_begin(int);
 void h_perf_tsc_end(int, int);
 long long h_tsc_get(int);
-long long h_perf_tsc_read(void);
+unsigned int h_perf_tsc_read(void);
 
 #endif

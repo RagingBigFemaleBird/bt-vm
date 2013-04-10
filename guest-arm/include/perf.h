@@ -21,7 +21,7 @@
 /*I/O instructions*/
 #define G_PERF_IO 0
 
-#define G_PERF_COUNT 0xff
+#define G_PERF_COUNT 0x1
 
 void g_perf_inc(int, long);
 void g_perf_init(void);

@@ -149,7 +149,9 @@ h_cpu_init(void)
     V_LOG("Try to set DSCR to: %x\n", hostcpu.p14_dscr);
     asm volatile ("mrc p14 ,0 ,%0, c0, c1, 0":"=r" (hostcpu.p14_dscr));
     V_LOG("DSCR: %x\n", hostcpu.p14_dscr);
+#ifdef BT_CACHE
     cache_offset = ((void *) bt_cache_start1) - ((void *) h_switch_to1);
+#endif
     return 0;
 }
 
@@ -236,7 +238,7 @@ h_bt_cache_restore(struct v_world *world)
         hcache = (struct h_bt_cache *) (cache + __CB_START);
         world->poi = hcache[total - set].poi;
         world->poi->expect = 0;
-        V_LOG("BT restore poi to %lx", world->poi->addr);
+        V_VERBOSE("BT restore poi to %lx", world->poi->addr);
         world->current_valid_bps = world->poi->plan.count;
         h_bt_reset(world);
         for (set = 0; set < world->poi->plan.count; set++) {
@@ -283,7 +285,7 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
                 hcache[i].bvr[j] = plan[i].plan->poi[j]->addr;
                 hcache[i].bcr[j] = BPC_BAS_ANY | BPC_ENABLED;
                 if ((plan[i].plan->poi[j]->type & V_INST_PB)
-                    && pb_total <= 2 * BT_CACHE_CAPACITY) {
+                    && pb_total <= BT_CACHE_CAPACITY) {
                     int k;
                     for (k = 0; k < pb_total; k++) {
                         if (pb_cache[k].addr == plan[i].plan->poi[j]->addr) {
@@ -296,8 +298,9 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
                         pb_cache[pb_total].addr);
                     pb_total++;
                 }
+              found:
+                asm volatile ("nop");
             }
-          found:
             for (; j < 6; j++) {
                 hcache[i].bvr[j] = 0;
                 hcache[i].bcr[j] = BPC_DISABLED;
@@ -306,7 +309,7 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
     }
     for (i = 0; i < world->current_valid_bps; i++) {
         if ((world->bp_to_poi[i]->type & V_INST_PB)
-            && pb_total <= 2 * BT_CACHE_CAPACITY) {
+            && pb_total <= BT_CACHE_CAPACITY) {
             int k;
             for (k = 0; k < pb_total; k++) {
                 if (pb_cache[k].addr == world->bp_to_poi[i]->addr) {
@@ -377,20 +380,20 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
     asm volatile ("adds r4, r0, r1"); \
     asm volatile ("beq 9b"); \
     asm volatile ("mov r4, #0"); \
+    asm volatile ("add r10, r11, #16"); \
     asm volatile ("21:"); \
     asm volatile ("cmp r1, #0"); \
     asm volatile ("beq 20f"); \
-    asm volatile ("add r10, r11, #16"); \
     asm volatile ("ldr r5, [r10, r4, lsl #3]"); \
     asm volatile ("cmp r5, lr"); \
     asm volatile ("beq 50f"); \
     asm volatile ("sub r1, r1, #1"); \
     asm volatile ("add r4, r4, #1"); \
     asm volatile ("b 21b"); \
-    asm volatile ("20:"); \
-    asm volatile ("b 9b"); \
     asm volatile ("50:"); \
     asm volatile ("str r1, [r11, #12]"); \
+    asm volatile ("mov r1, #0"); \
+    asm volatile ("str r1, [r11, #4]"); \
     asm volatile ("mov r0, #0"); \
     asm volatile ("mcr p14, 0, r0, c0, c0, 5"); \
     asm volatile ("mcr p14, 0, r0, c0, c0, 4"); \
@@ -408,9 +411,56 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
     asm volatile ("mcr p14, 0, r0, c0, c5, 5"); \
     asm volatile ("mcr p14, 0, lr, c0, c5, 4"); \
     asm volatile ("ldmia r13, {r0-r14}^"); \
-    asm volatile ("movs pc, lr");
+    asm volatile ("movs pc, lr"); \
+    asm volatile ("20:"); \
+    asm volatile ("add r10, r10, #"STRINGIFY(cache_capacity)"* 8"); \
+    asm volatile ("mov r4, #0"); \
+    asm volatile ("31:"); \
+    asm volatile ("cmp r0, #0"); \
+    asm volatile ("beq 32f"); \
+    asm volatile ("mov r7, #56"); \
+    asm volatile ("mul r6, r4, r7"); \
+    asm volatile ("ldr r5, [r10, r6]"); \
+    asm volatile ("cmp r5, lr"); \
+    asm volatile ("beq 51f"); \
+    asm volatile ("sub r0, r0, #1"); \
+    asm volatile ("add r4, r4, #1"); \
+    asm volatile ("b 31b"); \
+    asm volatile ("51:"); \
+    asm volatile ("str r0, [r11, #4]"); \
+    asm volatile ("mov r1, #0"); \
+    asm volatile ("str r1, [r11, #12]"); \
+    asm volatile ("add r10, r10, r6"); \
+    asm volatile ("ldr r0, [r10, #4]"); \
+    asm volatile ("mcr p14, 0, r0, c0, c0, 5"); \
+    asm volatile ("ldr r0, [r10, #28]"); \
+    asm volatile ("mcr p14, 0, r0, c0, c0, 4"); \
+    asm volatile ("ldr r0, [r10, #8]"); \
+    asm volatile ("mcr p14, 0, r0, c0, c1, 5"); \
+    asm volatile ("ldr r0, [r10, #32]"); \
+    asm volatile ("mcr p14, 0, r0, c0, c1, 4"); \
+    asm volatile ("ldr r0, [r10, #12]"); \
+    asm volatile ("mcr p14, 0, r0, c0, c2, 5"); \
+    asm volatile ("ldr r0, [r10, #36]"); \
+    asm volatile ("mcr p14, 0, r0, c0, c2, 4"); \
+    asm volatile ("ldr r0, [r10, #16]"); \
+    asm volatile ("mcr p14, 0, r0, c0, c3, 5"); \
+    asm volatile ("ldr r0, [r10, #40]"); \
+    asm volatile ("mcr p14, 0, r0, c0, c3, 4"); \
+    asm volatile ("ldr r0, [r10, #20]"); \
+    asm volatile ("mcr p14, 0, r0, c0, c4, 5"); \
+    asm volatile ("ldr r0, [r10, #44]"); \
+    asm volatile ("mcr p14, 0, r0, c0, c4, 4"); \
+    asm volatile ("ldr r0, [r10, #24]"); \
+    asm volatile ("mcr p14, 0, r0, c0, c5, 5"); \
+    asm volatile ("ldr r0, [r10, #48]"); \
+    asm volatile ("mcr p14, 0, lr, c0, c5, 4"); \
+    asm volatile ("ldmia r13, {r0-r14}^"); \
+    asm volatile ("movs pc, lr"); \
+    asm volatile ("32:"); \
+    asm volatile ("b 9b");
 #else
-#define CACHE_BT_REGION
+#define CACHE_BT_REGION(function_no, cache_capacity)
 #endif
 
 
@@ -432,6 +482,7 @@ h_switch_to##function_no(unsigned long trbase, struct v_world *w) \
     unsigned int ifar, ifsr, dfar, dfsr; \
     h->hcpu.p15_trattr = hostcpu.p15_trattr; \
     local_irq_save(i); \
+    h_perf_tsc_begin(0); \
     asm volatile ("mcr p15, 0, %0, c1, c0, 0"::"r" (hostcpu.p15_ctrl & \
             (~P15_CTRL_V))); \
     asm volatile ("mcr p15, 0, %0, c12, c0, 0"::"r" (h_vector_entry##function_no)); \
@@ -564,6 +615,8 @@ h_switch_to##function_no(unsigned long trbase, struct v_world *w) \
     asm volatile ("mcr p15, 0, %0, c1, c0, 0"::"r" (hostcpu.p15_ctrl)); \
     local_irq_restore(i); \
     H_BT_CACHE_RESTORE(w); \
+    h_perf_tsc_end(H_PERF_TSC_GUEST, 0); \
+    h_perf_tsc_begin(0); \
     v_perf_inc(V_PERF_WS, 1); \
     V_LOG("breakpoints %x %x", w->hregs.gcpu.bcr[0], w->hregs.gcpu.bvr[0]); \
     V_VERBOSE("saved banked regs: %x %x %x %x %x %x %x %x", h->hcpu.r13_fiq, \
@@ -599,6 +652,7 @@ h_switch_to##function_no(unsigned long trbase, struct v_world *w) \
                     bp_hit = 1; \
                     v_perf_inc(V_PERF_BT, 1); \
                     v_do_bp(w, g_get_ip(w), 1); \
+                    h_perf_tsc_end(H_PERF_TSC_BT, 0); \
                 } else { \
                     for (i = 0; i < hostcpu.number_of_breakpoints; i++) { \
                         if (h_get_bp(w, i) == g_get_ip(w)) { \
@@ -606,6 +660,7 @@ h_switch_to##function_no(unsigned long trbase, struct v_world *w) \
                             V_EVENT("Breakpoint %x hit at %x", i, g_get_ip(w)); \
                             v_perf_inc(V_PERF_BT, 1); \
                             v_do_bp(w, g_get_ip(w), 0); \
+                            h_perf_tsc_end(H_PERF_TSC_BT, 0); \
                             break; \
                         } \
                     } \
@@ -620,7 +675,6 @@ h_switch_to##function_no(unsigned long trbase, struct v_world *w) \
         } \
  \
         if (!bp_hit) { \
-            /*          v_perf_inc(V_PERF_PF, 1);*/ \
             v_perf_inc(V_PERF_PF, 1); \
             if ((fault = v_pagefault(w, address, fault)) != V_MM_FAULT_HANDLED) { \
                 V_ERR("Guest injection of page fault %x, %x, %x, %x", dfar, \
@@ -631,28 +685,16 @@ h_switch_to##function_no(unsigned long trbase, struct v_world *w) \
                 w->gregs.p15_ifsr = ifsr; \
                 h_inject_int(w, h->gcpu.reason); \
             } \
-            /*      h_perf_tsc_end(H_PERF_TSC_PF, 0);*/ \
+            h_perf_tsc_end(H_PERF_TSC_PF, 0); \
         } \
 /*              return 1;*/\
     } else if (h->gcpu.reason == 1) { \
         if (g_in_priv(w) || (w->gregs.cpsr & G_PRIV_MASK) == G_PRIV_RST) { \
             v_perf_inc(V_PERF_PI, 1); \
             h_do_fail_inst(w, g_get_ip(w)); \
+            h_perf_tsc_end(H_PERF_TSC_PI, 0); \
         } else { \
             w->status = VM_PAUSED; \
-            V_ERR("Unprivileged und fault"); \
-            V_ERR("breakpoints %x %x", w->hregs.gcpu.bcr[0], \
-                w->hregs.gcpu.bvr[0]); \
-            V_ERR("breakpoints %x %x", w->hregs.gcpu.bcr[1], \
-                w->hregs.gcpu.bvr[1]); \
-            V_ERR("breakpoints %x %x", w->hregs.gcpu.bcr[2], \
-                w->hregs.gcpu.bvr[2]); \
-            V_ERR("breakpoints %x %x", w->hregs.gcpu.bcr[3], \
-                w->hregs.gcpu.bvr[3]); \
-            V_ERR("breakpoints %x %x", w->hregs.gcpu.bcr[4], \
-                w->hregs.gcpu.bvr[4]); \
-            V_ERR("breakpoints %x %x", w->hregs.gcpu.bcr[5], \
-                w->hregs.gcpu.bvr[5]); \
             h_do_fail_inst(w, g_get_ip(w)); \
             h_inject_int(w, 1); \
         } \
@@ -661,6 +703,7 @@ h_switch_to##function_no(unsigned long trbase, struct v_world *w) \
             V_ERR("Guest sys call @ %x, with %x %x %x", h->gcpu.pc, h->gcpu.r0, \
                 h->gcpu.r1, h->gcpu.r2); \
             h_inject_int(w, 2); \
+            h_perf_tsc_end(H_PERF_TSC_PI, 0); \
         } \
     } else if (h->gcpu.reason == 6) { \
         if (!(w->gregs.cpsr & H_CPSR_I)) { \

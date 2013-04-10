@@ -47,19 +47,14 @@ h_perf_init(void)
     }
 }
 
-static long long volatile last_tsc[3];
+static unsigned int volatile last_tsc[3];
 
-long long
+unsigned int
 h_perf_tsc_read(void)
 {
-    union {
-        struct {
-            unsigned long low;
-            unsigned long high;
-        } part;
-        unsigned long long full;
-    } ret;
-    return ret.full;
+    unsigned int counter;
+    asm volatile ("mcr p15, 0, %0, c9, c13, 0":"=r" (counter));
+    return counter;
 }
 
 void
@@ -71,6 +66,10 @@ h_perf_tsc_begin(int tscidx)
 void
 h_perf_tsc_end(int index, int tscidx)
 {
-    unsigned long long this_tsc = h_perf_tsc_read();
-    h_tsc_counters[index] += (this_tsc - last_tsc[tscidx]);
+    unsigned int this_tsc = h_perf_tsc_read();
+    if (this_tsc > last_tsc[tscidx]) {
+        h_tsc_counters[index] += (this_tsc - last_tsc[tscidx]);
+    } else {
+        h_tsc_counters[index] += (0x100000000 + this_tsc - last_tsc[tscidx]);
+    }
 }

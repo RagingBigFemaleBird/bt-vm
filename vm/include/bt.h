@@ -43,7 +43,6 @@ struct v_poi_tree_plan {
 #define BT_CACHE_PB_COUNT 16
 #define BT_CACHE_TARGET_ENTRIES_TOTAL 4
 #define BT_CACHE_INVALIDATE_ENTRIES_COUNT 4
-#define BT_CACHE_LEVEL3
 
 struct cache_target_payload {
     unsigned int total;

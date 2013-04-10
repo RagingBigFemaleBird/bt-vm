@@ -186,8 +186,10 @@ v_add_poi(struct v_page *mpage, unsigned int addr,
     poi->invalid = 0;
     poi->tree = NULL;
     poi->plan.valid = 0;
+#ifdef BT_CACHE
     poi->cached_plan = NULL;
     poi->invalidate_cached_plan_count = 0;
+#endif
     mpage->poi_list = poi;
     return poi;
 }
@@ -1055,7 +1057,7 @@ v_bt_cache(struct v_world *world)
 #ifdef BT_CACHE_LEVEL3
         h_bt_cache_direct(world, cache);
 #else
-        h_bt_cache(world, cache->plan, cache->count);
+        h_bt_cache(world, cache->plan, cache->length);
 #endif
     } else {
 #ifdef __DEBUG_BT_CACHE
