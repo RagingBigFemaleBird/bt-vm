@@ -81,6 +81,7 @@ struct v_poi {
     struct v_poi_cached_tree_plan_container
      *invalidate_cached_plan[BT_CACHE_INVALIDATE_ENTRIES_COUNT];
     int invalidate_cached_plan_count;
+    int cache_threshold;
 #endif
 };
 

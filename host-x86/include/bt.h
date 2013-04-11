@@ -20,6 +20,9 @@
 
 #include "host/include/mm.h"
 
+#define BT_CACHE_LEVEL3
+#define BT_CACHE_THRESHOLD 0
+
 struct v_world;
 
 void h_set_bp(struct v_world *, h_addr_t, unsigned int);

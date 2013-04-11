@@ -189,6 +189,7 @@ v_add_poi(struct v_page *mpage, unsigned int addr,
 #ifdef BT_CACHE
     poi->cached_plan = NULL;
     poi->invalidate_cached_plan_count = 0;
+    poi->cache_threshold = 0;
 #endif
     mpage->poi_list = poi;
     return poi;
@@ -1041,6 +1042,9 @@ v_bt_cache(struct v_world *world)
     struct v_poi_cached_tree_plan_container *cache;
     int cache_count = 0;
     h_perf_tsc_begin(2);
+    if (world->poi->cache_threshold++ < BT_CACHE_THRESHOLD) {
+        return;
+    }
     total = world->current_valid_bps;
     if (world->poi->cached_plan == NULL) {
         struct v_poi_cached_tree_plan *plan =
