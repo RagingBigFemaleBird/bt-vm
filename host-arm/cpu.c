@@ -76,6 +76,29 @@ debug_dump(struct v_world *world)
 */
 }
 
+void
+run_tests(void)
+{
+    int i;
+    unsigned int counter, counter1;
+    asm volatile ("mrc p15, 0, %0, c9, c12, 0":"=r" (counter));
+    V_ERR("Current PMNC %x", counter);
+    counter = counter | 1;
+    asm volatile ("mcr p15, 0, %0, c9, c12, 0"::"r" (counter));
+    asm volatile ("mcr p15, 0, %0, c9, c12, 1"::"r" (0x8000000f));
+    asm volatile ("mcr p15, 0, %0, c9, c14, 0"::"r" (1));
+    V_ERR("Starting test...\n");
+    asm volatile ("mrc p15, 0, %0, c9, c13, 0":"=r" (counter));
+    for (i = 0; i < 10000; i++) {
+        asm volatile ("push {r0, r7}");
+        asm volatile ("mov %r7, $24");
+        asm volatile ("swi $0");
+        asm volatile ("pop {r0, r7}");
+    }
+    asm volatile ("mrc p15, 0, %0, c9, c13, 0":"=r" (counter1));
+    V_ERR("%x\n%x\n---\n", counter, counter1);
+}
+
 int
 h_cpu_init(void)
 {
@@ -152,6 +175,7 @@ h_cpu_init(void)
 #ifdef BT_CACHE
     cache_offset = ((void *) bt_cache_start1) - ((void *) h_switch_to1);
 #endif
+    run_tests();
     return 0;
 }
 
@@ -273,6 +297,8 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
     *((unsigned int *) (cache + __SET)) = 0;
     *((unsigned int *) (cache + __PB_TOTAL)) = 0;
     *((unsigned int *) (cache + __PB_SET)) = 0;
+    if (plan == NULL)
+        return;
     pb_cache = (struct h_bt_pb_cache *) (cache + __PB_START);
     V_VERBOSE("Cache total %x", count);
     if (count != 0) {

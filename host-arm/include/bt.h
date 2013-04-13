@@ -31,6 +31,8 @@ unsigned long h_get_bp(struct v_world *, int bp_number);
 #define BPC_BAS_ANY 0x1e4
 #define BPC_MISMATCH (1 << 22)
 
+#define BT_CACHE_THRESHOLD 100
+
 struct v_poi_cached_tree_plan;
 
 #ifdef BT_CACHE

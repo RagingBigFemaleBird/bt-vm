@@ -204,6 +204,8 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
     *((unsigned int *) (cache + __SET)) = 0;
     *((unsigned int *) (cache + __PB_TOTAL)) = 0;
     *((unsigned int *) (cache + __PB_SET)) = 0;
+    if (plan == NULL)
+        return;
     pb_cache = (struct h_bt_pb_cache *) (cache + __PB_START);
     V_VERBOSE("Cache total %x", count);
     if (count != 0) {

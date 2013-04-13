@@ -1043,6 +1043,7 @@ v_bt_cache(struct v_world *world)
     int cache_count = 0;
     h_perf_tsc_begin(2);
     if (world->poi->cache_threshold++ < BT_CACHE_THRESHOLD) {
+        h_bt_cache(world, NULL, 0);
         return;
     }
     total = world->current_valid_bps;

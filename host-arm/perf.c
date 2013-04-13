@@ -45,6 +45,9 @@ h_perf_init(void)
     for (i = 0; i < H_PERF_COUNT; i++) {
         h_perf_counters[i] = 0;
     }
+    for (i = 0; i < H_TSC_COUNT; i++) {
+        h_tsc_counters[i] = 0;
+    }
 }
 
 static unsigned int volatile last_tsc[3];
@@ -53,7 +56,7 @@ unsigned int
 h_perf_tsc_read(void)
 {
     unsigned int counter;
-    asm volatile ("mcr p15, 0, %0, c9, c13, 0":"=r" (counter));
+    asm volatile ("mrc p15, 0, %0, c9, c13, 0":"=r" (counter));
     return counter;
 }
 
