@@ -18,6 +18,7 @@
 #include "host/include/mm.h"
 #include "vm/include/lru_cache.h"
 #include "vm/include/logging.h"
+#include "vm/include/perf.h"
 #include <linux/mm.h>
 
 static int timestamp = 0;
@@ -60,6 +61,7 @@ lru_cache_update32(struct lru_cache *cache, unsigned int key32, int *new_entry)
     }
     *new_entry = 1;
     entry = (struct lru_cache_entry *) (body + unit_size * position);
+    if (entry->key32 != 0) v_perf_inc(V_PERF_CONFLICT, 1);
     entry->key32 = key32;
     entry->timestamp = lru_stamp();
     entry->flags = 0;

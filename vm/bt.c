@@ -191,6 +191,9 @@ v_add_poi(struct v_page *mpage, unsigned int addr,
     poi->invalidate_cached_plan_count = 0;
     poi->cache_threshold = 0;
 #endif
+    if (type & V_INST_PB) v_perf_inc(V_PERF_POI_PB, 1);
+    if (type & V_INST_CB) v_perf_inc(V_PERF_POI_CB, 1);
+    if (type & V_INST_F) v_perf_inc(V_PERF_POI_F, 1);
     mpage->poi_list = poi;
     return poi;
 }
@@ -951,6 +954,7 @@ _v_bt_cache(struct v_world *world, struct v_poi *poi, int depth,
     if (depth >= BT_CACHE_LEVEL)
         return;
     if (*cache_count >= BT_CACHE_CAPACITY) {
+        v_perf_inc(V_PERF_FULL, 1);
         return;
     }
     for (i = 0; i < *cache_count; i++) {
@@ -1002,6 +1006,7 @@ _v_bt_cache(struct v_world *world, struct v_poi *poi, int depth,
                     V_ERR("Replacement eviction %p",
                         todo_poi[i]->invalidate_cached_plan[r]);
 #endif
+                    v_perf_inc(V_PERF_EVICT, 1);
                 }
                 todo_poi[i]->invalidate_cached_plan_count = 0;
             }
@@ -1093,6 +1098,7 @@ v_bt_cache(struct v_world *world)
                     V_ERR("Replacement eviction %p",
                         world->poi->invalidate_cached_plan[r]);
 #endif
+                    v_perf_inc(V_PERF_EVICT, 1);
                     world->poi->invalidate_cached_plan[r]->done = 0;
                 }
                 world->poi->invalidate_cached_plan_count = 0;
@@ -1148,6 +1154,7 @@ v_bt_cache(struct v_world *world)
                         V_ERR("Replacement eviction %p",
                             save_poi[i]->invalidate_cached_plan[r]);
 #endif
+                        v_perf_inc(V_PERF_EVICT, 1);
                         save_poi[i]->invalidate_cached_plan[r]->done = 0;
                     }
                     save_poi[i]->invalidate_cached_plan_count = 0;

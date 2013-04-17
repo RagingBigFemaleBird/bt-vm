@@ -496,6 +496,9 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
 #define H_BT_CACHE_RESTORE(w)
 #endif
 
+int umtest = 0;
+unsigned int umtest1, umtest2;
+
 #define H_SWITCH_TO(function_no) \
 void h_vector_entry##function_no(void); \
 __attribute__ ((aligned (0x1000))) \
@@ -726,8 +729,30 @@ h_switch_to##function_no(unsigned long trbase, struct v_world *w) \
         } \
     } else if (h->gcpu.reason == 2) { \
         if (!((w->gregs.cpsr & G_PRIV_MASK) == G_PRIV_RST)) { \
-            V_ERR("Guest sys call @ %x, with %x %x %x", h->gcpu.pc, h->gcpu.r0, \
-                h->gcpu.r1, h->gcpu.r2); \
+            if (umtest == 0 && h->gcpu.r6 == 0xdeadbeef) { \
+                V_ERR("Usermode test start"); \
+                v_perf_init(); \
+                h_perf_init(); \
+                asm volatile ("mrc p15, 0, %0, c9, c13, 0":"=r" (umtest1)); \
+                umtest = 1; \
+            } else \
+            if (umtest > 0 && h->gcpu.r6 == 0xdeadbeef) { \
+                umtest++; \
+                if (h->gcpu.pc == 0x8110 || umtest >= 0x9998) { \
+                    int ii; \
+                    V_ERR("Usermode test done %x", umtest); \
+                    w->status = VM_PAUSED; \
+                    asm volatile ("mrc p15, 0, %0, c9, c13, 0":"=r" (umtest2)); \
+                    V_ERR("%x \n  - %x\n ^^^", umtest1, umtest2); \
+                    umtest = 0; \
+                    for (ii = 0; ii < V_PERF_COUNT; ii++) V_ERR("VM perf %x: %x", ii, v_perf_get(ii)); \
+                    for (ii = 0; ii < H_PERF_COUNT; ii++) V_ERR("Host perf %x: %x", ii, h_perf_get(ii)); \
+                    for (ii = 0; ii < H_TSC_COUNT; ii++) V_ERR("TSC %x: %llx", ii, h_tsc_get(ii)); \
+                } \
+            } else {\
+                V_ERR("Guest sys call @ %x, with %x %x %x", h->gcpu.pc, h->gcpu.r0, \
+                    h->gcpu.r1, h->gcpu.r2); \
+            } \
             h_inject_int(w, 2); \
             h_perf_tsc_end(H_PERF_TSC_PI, 0); \
         } \
