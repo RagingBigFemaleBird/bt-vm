@@ -41,7 +41,7 @@ struct h_cpu hostcpu;
 
 #ifdef BT_CACHE
 static int cache_offset;
-void bt_cache_start1(void);
+void bt_cache_start(void);
 #endif
 
 static void h_inject_int(struct v_world *world, unsigned int int_no);
@@ -173,7 +173,7 @@ h_cpu_init(void)
     asm volatile ("mrc p14 ,0 ,%0, c0, c1, 0":"=r" (hostcpu.p14_dscr));
     V_LOG("DSCR: %x\n", hostcpu.p14_dscr);
 #ifdef BT_CACHE
-    cache_offset = ((void *) bt_cache_start1) - ((void *) h_switch_to1);
+    cache_offset = ((void *) bt_cache_start) - ((void *) h_switcher);
 #endif
     run_tests();
     return 0;
@@ -239,7 +239,7 @@ static int usermode_debug = 0;
 void
 h_bt_squash_pb(struct v_world *world)
 {
-    void *cache = world->npage;
+    void *cache = world->hregs.hcpu.switcher;
     cache += cache_offset;
     *((unsigned int *) (cache + __PB_TOTAL)) = 0;
 }
@@ -247,7 +247,7 @@ h_bt_squash_pb(struct v_world *world)
 void
 h_bt_cache_restore(struct v_world *world)
 {
-    void *cache = world->npage;
+    void *cache = world->hregs.hcpu.switcher;
     int total, set, pb_total, pb_set;
     struct h_bt_cache *hcache;
     struct h_bt_pb_cache *h_pb_cache;
@@ -287,7 +287,7 @@ void
 h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
     int count)
 {
-    void *cache = world->npage;
+    void *cache = world->hregs.hcpu.switcher;
     struct h_bt_cache *hcache;
     struct h_bt_pb_cache *pb_cache;
     int i;
@@ -311,7 +311,7 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
                 hcache[i].bvr[j] = plan[i].plan->poi[j]->addr;
                 hcache[i].bcr[j] = BPC_BAS_ANY | BPC_ENABLED;
                 if ((plan[i].plan->poi[j]->type & V_INST_PB)
-                    && pb_total <= BT_CACHE_CAPACITY) {
+                    && pb_total <= BT_CACHE_CAPACITY * 2) {
                     int k;
                     for (k = 0; k < pb_total; k++) {
                         if (pb_cache[k].addr == plan[i].plan->poi[j]->addr) {
@@ -335,7 +335,7 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
     }
     for (i = 0; i < world->current_valid_bps; i++) {
         if ((world->bp_to_poi[i]->type & V_INST_PB)
-            && pb_total <= BT_CACHE_CAPACITY) {
+            && pb_total <= BT_CACHE_CAPACITY * 2) {
             int k;
             for (k = 0; k < pb_total; k++) {
                 if (pb_cache[k].addr == world->bp_to_poi[i]->addr) {
@@ -366,17 +366,17 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
 #endif
 
 #ifdef BT_CACHE
-#define CACHE_BT_REGION(function_no, cache_capacity) \
+#define CACHE_BT_REGION(cache_capacity) \
     asm volatile ("10:"); \
     asm volatile ("mov r11, pc"); \
     asm volatile ("b 11f"); \
-    asm volatile (".global bt_cache_start"#function_no); \
-    asm volatile ("bt_cache_start"#function_no":"); \
+    asm volatile (".global bt_cache_start"); \
+    asm volatile ("bt_cache_start:"); \
     asm volatile (".long 0"); \
     asm volatile (".long 0"); \
     asm volatile (".long 0"); \
     asm volatile (".long 0"); \
-    asm volatile (".rept "STRINGIFY(cache_capacity)); \
+    asm volatile (".rept "STRINGIFY(cache_capacity)"*2"); \
     asm volatile (".long 0"); \
     asm volatile (".long 0"); \
     asm volatile (".endr"); \
@@ -439,7 +439,7 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
     asm volatile ("ldmia r13, {r0-r14}^"); \
     asm volatile ("movs pc, lr"); \
     asm volatile ("20:"); \
-    asm volatile ("add r10, r10, #"STRINGIFY(cache_capacity)"* 8"); \
+    asm volatile ("add r10, r10, #"STRINGIFY(cache_capacity)"* 2 * 8"); \
     asm volatile ("mov r4, #0"); \
     asm volatile ("31:"); \
     asm volatile ("cmp r0, #0"); \
@@ -498,352 +498,355 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
 
 int umtest = 0;
 unsigned int umtest1, umtest2;
+void h_vector_entry(void);
 
-#define H_SWITCH_TO(function_no) \
-void h_vector_entry##function_no(void); \
-__attribute__ ((aligned (0x1000))) \
-int \
-h_switch_to##function_no(unsigned long trbase, struct v_world *w) \
-{ \
-    struct h_regs *h = &w->hregs; \
-    unsigned int tr = ((unsigned int) trbase) | (hostcpu.p15_trattr); \
-    unsigned long i; \
-    unsigned int ifar, ifsr, dfar, dfsr; \
-    h->hcpu.p15_trattr = hostcpu.p15_trattr; \
-    local_irq_save(i); \
-    h_perf_tsc_begin(0); \
-    asm volatile ("mcr p15, 0, %0, c1, c0, 0"::"r" (hostcpu.p15_ctrl & \
-            (~P15_CTRL_V))); \
-    asm volatile ("mcr p15, 0, %0, c12, c0, 0"::"r" (h_vector_entry##function_no)); \
-    asm volatile ("mcr p14 ,0 ,%0, c0, c0, 5"::"r" (w->hregs.gcpu.bcr[0])); \
-    asm volatile ("mcr p14 ,0 ,%0, c0, c0, 4"::"r" (w->hregs.gcpu.bvr[0])); \
-    asm volatile ("mcr p14 ,0 ,%0, c0, c1, 5"::"r" (w->hregs.gcpu.bcr[1])); \
-    asm volatile ("mcr p14 ,0 ,%0, c0, c1, 4"::"r" (w->hregs.gcpu.bvr[1])); \
-    asm volatile ("mcr p14 ,0 ,%0, c0, c2, 5"::"r" (w->hregs.gcpu.bcr[2])); \
-    asm volatile ("mcr p14 ,0 ,%0, c0, c2, 4"::"r" (w->hregs.gcpu.bvr[2])); \
-    asm volatile ("mcr p14 ,0 ,%0, c0, c3, 5"::"r" (w->hregs.gcpu.bcr[3])); \
-    asm volatile ("mcr p14 ,0 ,%0, c0, c3, 4"::"r" (w->hregs.gcpu.bvr[3])); \
-    asm volatile ("mcr p14 ,0 ,%0, c0, c4, 5"::"r" (w->hregs.gcpu.bcr[4])); \
-    asm volatile ("mcr p14 ,0 ,%0, c0, c4, 4"::"r" (w->hregs.gcpu.bvr[4])); \
-    asm volatile ("mcr p14 ,0 ,%0, c0, c5, 5"::"r" (w->hregs.gcpu.bcr[5])); \
-    asm volatile ("mcr p14 ,0 ,%0, c0, c5, 4"::"r" (w->hregs.gcpu.bvr[5])); \
-    h_cpu_switch_mm(tr, 0xb1); \
-    h_flush_tlb_all(); \
- \
-    asm volatile ( \
-        /*world switch starts here */ \
-        "mov r12, %0\n\t"               /*host cpu save base */ \
-        "stmia r12, {r0-r14}\n\t"       /*save host cpu registers */ \
-        "mov r10, %1\n\t"               /*guest cpu save base */ \
-        "add r12, r12, #60\n\t" \
-        "mov r0, #0xd1\n\t" /*FIQ*/ \
-        "msr cpsr_c, r0\n\t" \
-        "mov r1, r13\n\t" \
-        "mov r2, r14\n\t" \
-        "mov r0, #0xd2\n\t" /*IRQ*/ \
-        "msr cpsr_c, r0\n\t" \
-        "mov r3, r13\n\t" \
-        "mov r4, r14\n\t" \
-        "mov r0, #0xd7\n\t" /*ABT*/ \
-        "msr cpsr_c, r0\n\t" \
-        "mov r5, r13\n\t" \
-        "mov r6, r14\n\t" \
-        "mov r0, #0xdb\n\t" /*UND*/ \
-        "msr cpsr_c, r0\n\t" \
-        "mov r7, r13\n\t" \
-        "mov r8, r14\n\t" \
-        "mov r0, #0xd3\n\t" /*SVC*/ \
-        "mov r9, r13\n\t" \
-        "mov r11, r14\n\t" \
-        "msr cpsr_c, r0\n\t" \
-        "stmia r12, {r13-r14}^\n\t"   /* save banked reg */\
-        "add r12, r12, #8\n\t" \
-        "mrs r0, spsr\n\t" \
-        "str r0, [r12]\n\t" \
-        "add r12, r12, #8\n\t" \
-        "stmia r12, {r1-r9, r11}\n\t"      /* save stack position */\
-        "mov r0, #0xd1\n\t" /*FIQ*/ \
-        "msr cpsr_c, r0\n\t" \
-        "mov r13, r10\n\t" \
-        "mov r14, r10\n\t" \
-        "mov r0, #0xd2\n\t" /*IRQ*/ \
-        "msr cpsr_c, r0\n\t" \
-        "mov r13, r10\n\t" \
-        "mov r14, r10\n\t" \
-        "mov r0, #0xd7\n\t" /*ABT*/ \
-        "msr cpsr_c, r0\n\t" \
-        "mov r13, r10\n\t" \
-        "mov r14, r10\n\t" \
-        "mov r0, #0xdb\n\t" /*UND*/ \
-        "msr cpsr_c, r0\n\t" \
-        "mov r13, r10\n\t" \
-        "mov r14, r10\n\t" \
-        "mov r0, #0xd3\n\t" /*SVC*/ \
-        "msr cpsr_c, r0\n\t" \
-        "mov r13, r10\n\t" \
-        "mov r14, r10\n\t" \
-        "str r12, [r10, #124]\n\t"   /*assign saved_sp, gcpu.saved_sp = &hcpu.r13_fiq */\
-/*debug        "str r10, [r12, #32]\n\t"*/\
-        "mov lr, r10\n\t"       /* only lr won't be stomped by restore */\
-        "ldr r0, [lr, #116]\n\t"        /* get gcpu.cpsr */\
-        "msr spsr_csxf, r0\n\t" \
-        "ldmia lr, {r0-r14}^\n\t" \
-        "ldr lr, [lr, #120]\n\t"      /*get gcpu.pc */\
-        "movs pc, lr\n\t" \
-/*        ".global h_vector_test" */\
-/*        "h_vector_test:\n\r" "cpsie i\n\r" "1:\n\r" "b 1b\n\r"*/\
-        /* world switch out here */ \
-        "h_vector_return"#function_no":\n\r" \
-        CACHE_BT_QUICKPATH(function_no) \
-        "mrs r0, spsr\n\t" \
-/*debug        "mov r0, #0xff\n\t"*/\
-        "str r0, [r13, #116]\n\t"       /* save gcpu.cpsr (=host environment spsr) */\
-        "str lr, [r13, #120]\n\t"       /* save gcpu.pc (=host environment lr) */\
-        "ldr r12, [r13, #124]\n\t"      /* r12 = gcpu.saved_sp = hcpu.r13_fiq */\
-/*debug        "str r10, [r12, #40]\n\t"*/\
-        "mov r0, #0xd3\n\t" \
-        "msr cpsr_c, r0\n\t" \
-        "ldmia r12, {r2-r11}\n\t" \
-        "mov r0, #0xd1\n\t" /*FIQ*/ \
-        "msr cpsr_c, r0\n\t" \
-        "mov r13, r2\n\t" \
-        "mov r14, r3\n\t" \
-        "mov r0, #0xd2\n\t" /*IRQ*/ \
-        "msr cpsr_c, r0\n\t" \
-        "mov r13, r4\n\t" \
-        "mov r14, r5\n\t" \
-        "mov r0, #0xd7\n\t" /*ABT*/ \
-        "msr cpsr_c, r0\n\t" \
-        "mov r13, r6\n\t" \
-        "mov r14, r7\n\t" \
-        "mov r0, #0xdb\n\t" /*UND*/ \
-        "msr cpsr_c, r0\n\t" \
-        "mov r13, r8\n\t" \
-        "mov r14, r9\n\t" \
-        "mov r0, #0xd3\n\t" /*SVC*/ \
-        "mov r13, r10\n\t" \
-        "mov r14, r11\n\t" \
-        "msr cpsr_c, r0\n\t" \
-        "sub r12, r12, #8\n\t" \
-        "ldr r0, [r12]\n\t" \
-        "msr spsr_csxf, r0\n\t" \
-        "sub r12, r12, #8\n\t" \
-        "ldmia r12, {r13-r14}^\n\t" \
-        "sub r12, r12, #60\n\t"::"r" (&(h->hcpu.r0)), "r"(&(h->gcpu.r0)):"r12"); \
-\
-    /* must maintain r12 until this instruction*/ \
-    asm volatile ("ldmia r12, {r0-r14}"); \
- \
-/*    asm volatile ("h_vector_return:");*/ \
-    h_cpu_switch_mm(h->hcpu.p15_trbase, h->hcpu.p15_asid); \
-    h_flush_tlb_all(); \
-     /*IFAR*/ asm volatile ("mrc p15, 0, %0, c6, c0, 2":"=r" (ifar)); \
-     /*IFSR*/ asm volatile ("mrc p15, 0, %0, c5, c0, 1":"=r" (ifsr)); \
-     /*DFAR*/ asm volatile ("mrc p15, 0, %0, c6, c0, 0":"=r" (dfar)); \
-     /*DFSR*/ asm volatile ("mrc p15, 0, %0, c5, c0, 0":"=r" (dfsr)); \
-    asm volatile ("mcr p15, 0, %0, c1, c0, 0"::"r" (hostcpu.p15_ctrl)); \
-    local_irq_restore(i); \
-    H_BT_CACHE_RESTORE(w); \
-    h_perf_tsc_end(H_PERF_TSC_GUEST, 0); \
-    h_perf_tsc_begin(0); \
-    v_perf_inc(V_PERF_WS, 1); \
-    V_LOG("breakpoints %x %x", w->hregs.gcpu.bcr[0], w->hregs.gcpu.bvr[0]); \
-    V_VERBOSE("saved banked regs: %x %x %x %x %x %x %x %x", h->hcpu.r13_fiq, \
-        h->hcpu.r14_fiq, h->hcpu.r13_irq, h->hcpu.r14_irq, \
-        h->hcpu.r13_abt, h->hcpu.r14_abt, h->hcpu.r13_und, h->hcpu.r14_und); \
-    V_VERBOSE("host regs: saved spsr %x, saved sp: %x", \
-        h->hcpu.spsr_save, h->gcpu.save_sp); \
-    V_LOG("Guest WS due to %x. Registers: pc=%x, cpsr=%x(%x), r0=%x, r1=%x, " \
-        "r2=%x, r3=%x, r4=%x, r5=%x, r6=%x, r7=%x, r8=%x, r9=%x, r10=%x, " \
-        "r11=%x, r12=%x, r13=%x, r14 = %x", h->gcpu.reason, h->gcpu.pc, \
-        w->gregs.cpsr, h->gcpu.cpsr, h->gcpu.r0, h->gcpu.r1, h->gcpu.r2, \
-        h->gcpu.r3, h->gcpu.r4, h->gcpu.r5, h->gcpu.r6, h->gcpu.r7, h->gcpu.r8, \
-        h->gcpu.r9, h->gcpu.r10, h->gcpu.r11, h->gcpu.r12, h->gcpu.r13, \
-        h->gcpu.r14); \
-    if ((h->gcpu.reason == 3 || h->gcpu.reason == 4)) { \
-        unsigned int fault = 0; \
-        g_addr_t address = 0; \
-        int bp_hit = 0; \
-        V_LOG("IFAR %x, IFSR %x, DFAR %x, DFSR %x", ifar, ifsr, dfar, dfsr); \
-        if (h->gcpu.reason == 3 && ((ifsr & 0x0d) == 0x0d)) { \
-            V_ERR \
-                ("Unhandled fault. Prefetch fault should never cause permission errors"); \
-            w->status = VM_PAUSED; \
-            time_up = 1; \
-            return 0; \
-        } \
-        /*todo: assert other failures. debug events can't occur on dabt. cannot handle imprecise aborts.*/ \
-        if (h->gcpu.reason == 3) { \
-            int i; \
-            if (g_in_priv(w)) { \
-                if (h_get_bp(w, hostcpu.number_of_breakpoints) != g_get_ip(w) \
-                    && (w->hregs.gcpu.bcr[hostcpu.number_of_breakpoints] & 1)) { \
-                    bp_hit = 1; \
-                    v_perf_inc(V_PERF_BT, 1); \
-                    v_do_bp(w, g_get_ip(w), 1); \
-                    h_perf_tsc_end(H_PERF_TSC_BT, 0); \
-                } else { \
-                    for (i = 0; i < hostcpu.number_of_breakpoints; i++) { \
-                        if (h_get_bp(w, i) == g_get_ip(w)) { \
-                            bp_hit = 1; \
-                            V_EVENT("Breakpoint %x hit at %x", i, g_get_ip(w)); \
-                            v_perf_inc(V_PERF_BT, 1); \
-                            v_do_bp(w, g_get_ip(w), 0); \
-                            h_perf_tsc_end(H_PERF_TSC_BT, 0); \
-                            break; \
-                        } \
-                    } \
-                } \
-            } \
-            fault = V_MM_FAULT_NP; \
-            address = ifar; \
-        } else if (h->gcpu.reason == 4) { \
-            fault = ((dfsr & 0x0d) == 0x0d) ? V_MM_FAULT_W : V_MM_FAULT_NP; \
-            fault |= ((dfsr & 0x800) ? V_MM_FAULT_W : 0); \
-            address = dfar; \
-        } \
- \
-        if (!bp_hit) { \
-            v_perf_inc(V_PERF_PF, 1); \
-            if ((fault = v_pagefault(w, address, fault)) != V_MM_FAULT_HANDLED) { \
-                V_ERR("Guest injection of page fault %x, %x, %x, %x", dfar, \
-                    ifar, dfsr, ifsr); \
-                w->gregs.p15_dfar = dfar; \
-                w->gregs.p15_ifar = ifar; \
-                w->gregs.p15_dfsr = dfsr; \
-                w->gregs.p15_ifsr = ifsr; \
-                h_inject_int(w, h->gcpu.reason); \
-            } \
-            h_perf_tsc_end(H_PERF_TSC_PF, 0); \
-        } \
-/*              return 1;*/\
-    } else if (h->gcpu.reason == 1) { \
-        if (g_in_priv(w) || (w->gregs.cpsr & G_PRIV_MASK) == G_PRIV_RST) { \
-            v_perf_inc(V_PERF_PI, 1); \
-            h_do_fail_inst(w, g_get_ip(w)); \
-            h_perf_tsc_end(H_PERF_TSC_PI, 0); \
-        } else { \
-            w->status = VM_PAUSED; \
-            h_do_fail_inst(w, g_get_ip(w)); \
-            h_inject_int(w, 1); \
-        } \
-    } else if (h->gcpu.reason == 2) { \
-        if (!((w->gregs.cpsr & G_PRIV_MASK) == G_PRIV_RST)) { \
-            if (umtest == 0 && h->gcpu.r6 == 0xdeadbeef) { \
-                V_ERR("Usermode test start"); \
-                v_perf_init(); \
-                h_perf_init(); \
-                asm volatile ("mrc p15, 0, %0, c9, c13, 0":"=r" (umtest1)); \
-                umtest = 1; \
-            } else \
-            if (umtest > 0 && h->gcpu.r6 == 0xdeadbeef) { \
-                umtest++; \
-                if (h->gcpu.pc == 0x8110 || umtest >= 0x9998) { \
-                    int ii; \
-                    V_ERR("Usermode test done %x", umtest); \
-                    w->status = VM_PAUSED; \
-                    asm volatile ("mrc p15, 0, %0, c9, c13, 0":"=r" (umtest2)); \
-                    V_ERR("%x \n  - %x\n ^^^", umtest1, umtest2); \
-                    umtest = 0; \
-                    for (ii = 0; ii < V_PERF_COUNT; ii++) V_ERR("VM perf %x: %x", ii, v_perf_get(ii)); \
-                    for (ii = 0; ii < H_PERF_COUNT; ii++) V_ERR("Host perf %x: %x", ii, h_perf_get(ii)); \
-                    for (ii = 0; ii < H_TSC_COUNT; ii++) V_ERR("TSC %x: %llx", ii, h_tsc_get(ii)); \
-                } \
-            } else {\
-                V_ERR("Guest sys call @ %x, with %x %x %x", h->gcpu.pc, h->gcpu.r0, \
-                    h->gcpu.r1, h->gcpu.r2); \
-            } \
-            h_inject_int(w, 2); \
-            h_perf_tsc_end(H_PERF_TSC_PI, 0); \
-        } \
-    } else if (h->gcpu.reason == 6) { \
-        if (!(w->gregs.cpsr & H_CPSR_I)) { \
-            if (last_poke + 100 < poke) { \
-                last_poke = poke; \
-                ack_pic_once = 1; \
-                h_inject_int(w, 6); \
-            } \
-        } \
-        time_up = 1; \
-    } \
- \
- \
-    asm volatile ("b skip_entrycode"#function_no); \
-    asm volatile (".balign 32"); \
-    asm volatile (".global h_vector_entry"#function_no); \
-    asm volatile ("h_vector_entry"#function_no":"); \
-    asm volatile ("b reset_entry"#function_no); \
-    asm volatile ("b und_entry"#function_no); \
-    asm volatile ("b swi_entry"#function_no); \
-    asm volatile ("b pre_entry"#function_no); \
-    asm volatile ("b data_entry"#function_no); \
-    asm volatile ("b inv_entry"#function_no); \
-    asm volatile ("b irq_entry"#function_no); \
-    asm volatile ("b fiq_entry"#function_no); \
- \
-    asm volatile ("reset_entry"#function_no":"); \
-    asm volatile ("stmia r13, {r0-r14}^"); \
-    asm volatile ("mov r12, #0"); \
-    asm volatile ("str r12, [r13, #72]"); \
-    asm volatile ("b h_vector_return"#function_no); \
- \
-    asm volatile ("und_entry"#function_no":"); \
-    asm volatile ("stmia r13, {r0-r14}^"); \
-    asm volatile ("sub lr, lr, #4"); \
-    asm volatile ("mov r12, #1"); \
-    asm volatile ("str r12, [r13, #72]"); \
-    asm volatile ("b h_vector_return"#function_no); \
- \
-    asm volatile ("swi_entry"#function_no":"); \
-    asm volatile ("stmia r13, {r0-r14}^"); \
-    asm volatile ("mov r12, #2"); \
-    asm volatile ("str r12, [r13, #72]"); \
-    asm volatile ("b h_vector_return"#function_no); \
- \
-    asm volatile ("pre_entry"#function_no":"); \
-    asm volatile ("stmia r13, {r0-r14}^"); \
-    asm volatile ("sub lr, lr, #4"); \
-    asm volatile ("mov r12, #3"); \
-    asm volatile ("str r12, [r13, #72]"); \
-    asm volatile ("b h_vector_return"#function_no); \
- \
-    asm volatile ("data_entry"#function_no":"); \
-    asm volatile ("stmia r13, {r0-r14}^"); \
-    asm volatile ("sub lr, lr, #8"); \
-    asm volatile ("mov r12, #4"); \
-    asm volatile ("str r12, [r13, #72]"); \
-    asm volatile ("b h_vector_return"#function_no); \
- \
-    asm volatile ("inv_entry"#function_no":"); \
-    asm volatile ("stmia r13, {r0-r14}^"); \
-    asm volatile ("sub lr, lr, #4"); \
-    asm volatile ("mov r12, #5"); \
-    asm volatile ("str r12, [r13, #72]"); \
-    asm volatile ("b h_vector_return"#function_no); \
- \
-    asm volatile ("irq_entry"#function_no":"); \
-    asm volatile ("stmia r13, {r0-r14}^"); \
-    asm volatile ("sub lr, lr, #4"); \
-    asm volatile ("mov r12, #6"); \
-    asm volatile ("str r12, [r13, #72]"); \
-    asm volatile ("b h_vector_return"#function_no); \
- \
-    asm volatile ("fiq_entry"#function_no":"); \
-    asm volatile ("stmia r13, {r0-r14}^"); \
-    asm volatile ("sub lr, lr, #4"); \
-    asm volatile ("mov r12, #7"); \
-    asm volatile ("str r12, [r13, #72]"); \
-    asm volatile ("b h_vector_return"#function_no); \
-    CACHE_BT_REGION(function_no, BT_CACHE_CAPACITY) \
-    asm volatile (".ltorg"); \
-    asm volatile ("skip_entrycode"#function_no":"); \
-    return 0; \
+__attribute__ ((aligned (0x1000))) 
+void
+h_switcher(unsigned long trbase, struct v_world *w)
+{
+    struct h_regs *h = &w->hregs; 
+    unsigned int tr = ((unsigned int) trbase) | (hostcpu.p15_trattr); 
+    unsigned long i; 
+    h->hcpu.p15_trattr = hostcpu.p15_trattr; 
+    local_irq_save(i); 
+    h_perf_tsc_begin(0); 
+    asm volatile ("mcr p15, 0, %0, c1, c0, 0"::"r" (hostcpu.p15_ctrl & 
+            (~P15_CTRL_V))); 
+    asm volatile ("mcr p15, 0, %0, c12, c0, 0"::"r" ((((unsigned int)h_vector_entry) & H_POFF_MASK) | (((unsigned int)(h->hcpu.switcher)) & H_PFN_MASK))); 
+    asm volatile ("mcr p14 ,0 ,%0, c0, c0, 5"::"r" (w->hregs.gcpu.bcr[0])); 
+    asm volatile ("mcr p14 ,0 ,%0, c0, c0, 4"::"r" (w->hregs.gcpu.bvr[0])); 
+    asm volatile ("mcr p14 ,0 ,%0, c0, c1, 5"::"r" (w->hregs.gcpu.bcr[1])); 
+    asm volatile ("mcr p14 ,0 ,%0, c0, c1, 4"::"r" (w->hregs.gcpu.bvr[1])); 
+    asm volatile ("mcr p14 ,0 ,%0, c0, c2, 5"::"r" (w->hregs.gcpu.bcr[2])); 
+    asm volatile ("mcr p14 ,0 ,%0, c0, c2, 4"::"r" (w->hregs.gcpu.bvr[2])); 
+    asm volatile ("mcr p14 ,0 ,%0, c0, c3, 5"::"r" (w->hregs.gcpu.bcr[3])); 
+    asm volatile ("mcr p14 ,0 ,%0, c0, c3, 4"::"r" (w->hregs.gcpu.bvr[3])); 
+    asm volatile ("mcr p14 ,0 ,%0, c0, c4, 5"::"r" (w->hregs.gcpu.bcr[4])); 
+    asm volatile ("mcr p14 ,0 ,%0, c0, c4, 4"::"r" (w->hregs.gcpu.bvr[4])); 
+    asm volatile ("mcr p14 ,0 ,%0, c0, c5, 5"::"r" (w->hregs.gcpu.bcr[5])); 
+    asm volatile ("mcr p14 ,0 ,%0, c0, c5, 4"::"r" (w->hregs.gcpu.bvr[5])); 
+    h_cpu_switch_mm(tr, 0xb1); 
+    h_flush_tlb_all(); 
+ 
+    asm volatile ( 
+        /*world switch starts here */ 
+        "mov r12, %0\n\t"               /*host cpu save base */ 
+        "stmia r12, {r0-r14}\n\t"       /*save host cpu registers */ 
+        "mov r10, %1\n\t"               /*guest cpu save base */ 
+        "add r12, r12, #60\n\t" 
+        "mov r0, #0xd1\n\t" /*FIQ*/ 
+        "msr cpsr_c, r0\n\t" 
+        "mov r1, r13\n\t" 
+        "mov r2, r14\n\t" 
+        "mov r0, #0xd2\n\t" /*IRQ*/ 
+        "msr cpsr_c, r0\n\t" 
+        "mov r3, r13\n\t" 
+        "mov r4, r14\n\t" 
+        "mov r0, #0xd7\n\t" /*ABT*/ 
+        "msr cpsr_c, r0\n\t" 
+        "mov r5, r13\n\t" 
+        "mov r6, r14\n\t" 
+        "mov r0, #0xdb\n\t" /*UND*/ 
+        "msr cpsr_c, r0\n\t" 
+        "mov r7, r13\n\t" 
+        "mov r8, r14\n\t" 
+        "mov r0, #0xd3\n\t" /*SVC*/ 
+        "mov r9, r13\n\t" 
+        "mov r11, r14\n\t" 
+        "msr cpsr_c, r0\n\t" 
+        "stmia r12, {r13-r14}^\n\t"   /* save banked reg */
+        "add r12, r12, #8\n\t" 
+        "mrs r0, spsr\n\t" 
+        "str r0, [r12]\n\t" 
+        "add r12, r12, #8\n\t" 
+        "stmia r12, {r1-r9, r11}\n\t"      /* save stack position */
+        "mov r0, #0xd1\n\t" /*FIQ*/ 
+        "msr cpsr_c, r0\n\t" 
+        "mov r13, r10\n\t" 
+        "mov r14, r10\n\t" 
+        "mov r0, #0xd2\n\t" /*IRQ*/ 
+        "msr cpsr_c, r0\n\t" 
+        "mov r13, r10\n\t" 
+        "mov r14, r10\n\t" 
+        "mov r0, #0xd7\n\t" /*ABT*/ 
+        "msr cpsr_c, r0\n\t" 
+        "mov r13, r10\n\t" 
+        "mov r14, r10\n\t" 
+        "mov r0, #0xdb\n\t" /*UND*/ 
+        "msr cpsr_c, r0\n\t" 
+        "mov r13, r10\n\t" 
+        "mov r14, r10\n\t" 
+        "mov r0, #0xd3\n\t" /*SVC*/ 
+        "msr cpsr_c, r0\n\t" 
+        "mov r13, r10\n\t" 
+        "mov r14, r10\n\t" 
+        "str r12, [r10, #124]\n\t"   /*assign saved_sp, gcpu.saved_sp = &hcpu.r13_fiq */
+/*debug        "str r10, [r12, #32]\n\t"*/
+        "mov lr, r10\n\t"       /* only lr won't be stomped by restore */
+        "ldr r0, [lr, #116]\n\t"        /* get gcpu.cpsr */
+        "msr spsr_csxf, r0\n\t" 
+        "ldmia lr, {r0-r14}^\n\t" 
+        "ldr lr, [lr, #120]\n\t"      /*get gcpu.pc */
+        "movs pc, lr\n\t" 
+/*        ".global h_vector_test" */
+/*        "h_vector_test:\n\r" "cpsie i\n\r" "1:\n\r" "b 1b\n\r"*/
+        /* world switch out here */ 
+        "h_vector_return:\n\r" 
+        CACHE_BT_QUICKPATH(function_no) 
+        "mrs r0, spsr\n\t" 
+/*debug        "mov r0, #0xff\n\t"*/
+        "str r0, [r13, #116]\n\t"       /* save gcpu.cpsr (=host environment spsr) */
+        "str lr, [r13, #120]\n\t"       /* save gcpu.pc (=host environment lr) */
+        "ldr r12, [r13, #124]\n\t"      /* r12 = gcpu.saved_sp = hcpu.r13_fiq */
+/*debug        "str r10, [r12, #40]\n\t"*/
+        "mov r0, #0xd3\n\t" 
+        "msr cpsr_c, r0\n\t" 
+        "ldmia r12, {r2-r11}\n\t" 
+        "mov r0, #0xd1\n\t" /*FIQ*/ 
+        "msr cpsr_c, r0\n\t" 
+        "mov r13, r2\n\t" 
+        "mov r14, r3\n\t" 
+        "mov r0, #0xd2\n\t" /*IRQ*/ 
+        "msr cpsr_c, r0\n\t" 
+        "mov r13, r4\n\t" 
+        "mov r14, r5\n\t" 
+        "mov r0, #0xd7\n\t" /*ABT*/ 
+        "msr cpsr_c, r0\n\t" 
+        "mov r13, r6\n\t" 
+        "mov r14, r7\n\t" 
+        "mov r0, #0xdb\n\t" /*UND*/ 
+        "msr cpsr_c, r0\n\t" 
+        "mov r13, r8\n\t" 
+        "mov r14, r9\n\t" 
+        "mov r0, #0xd3\n\t" /*SVC*/ 
+        "mov r13, r10\n\t" 
+        "mov r14, r11\n\t" 
+        "msr cpsr_c, r0\n\t" 
+        "sub r12, r12, #8\n\t" 
+        "ldr r0, [r12]\n\t" 
+        "msr spsr_csxf, r0\n\t" 
+        "sub r12, r12, #8\n\t" 
+        "ldmia r12, {r13-r14}^\n\t" 
+        "sub r12, r12, #60\n\t"::"r" (&(h->hcpu.r0)), "r"(&(h->gcpu.r0)):"r12"); 
+
+    /* must maintain r12 until this instruction*/ 
+    asm volatile ("ldmia r12, {r0-r14}"); 
+ 
+/*    asm volatile ("h_vector_return:");*/ 
+    h_cpu_switch_mm(h->hcpu.p15_trbase, h->hcpu.p15_asid); 
+    h_flush_tlb_all(); 
+    asm volatile ("mcr p15, 0, %0, c1, c0, 0"::"r" (hostcpu.p15_ctrl)); 
+    local_irq_restore(i); 
+ 
+    asm volatile ("b skip_entrycode"); 
+    asm volatile (".balign 32"); 
+    asm volatile (".global h_vector_entry"); 
+    asm volatile ("h_vector_entry:"); 
+    asm volatile ("b reset_entry"); 
+    asm volatile ("b und_entry"); 
+    asm volatile ("b swi_entry"); 
+    asm volatile ("b pre_entry"); 
+    asm volatile ("b data_entry"); 
+    asm volatile ("b inv_entry"); 
+    asm volatile ("b irq_entry"); 
+    asm volatile ("b fiq_entry"); 
+ 
+    asm volatile ("reset_entry"":"); 
+    asm volatile ("stmia r13, {r0-r14}^"); 
+    asm volatile ("mov r12, #0"); 
+    asm volatile ("str r12, [r13, #72]"); 
+    asm volatile ("b h_vector_return"); 
+ 
+    asm volatile ("und_entry"":"); 
+    asm volatile ("stmia r13, {r0-r14}^"); 
+    asm volatile ("sub lr, lr, #4"); 
+    asm volatile ("mov r12, #1"); 
+    asm volatile ("str r12, [r13, #72]"); 
+    asm volatile ("b h_vector_return"); 
+ 
+    asm volatile ("swi_entry"":"); 
+    asm volatile ("stmia r13, {r0-r14}^"); 
+    asm volatile ("mov r12, #2"); 
+    asm volatile ("str r12, [r13, #72]"); 
+    asm volatile ("b h_vector_return"); 
+ 
+    asm volatile ("pre_entry"":"); 
+    asm volatile ("stmia r13, {r0-r14}^"); 
+    asm volatile ("sub lr, lr, #4"); 
+    asm volatile ("mov r12, #3"); 
+    asm volatile ("str r12, [r13, #72]"); 
+    asm volatile ("b h_vector_return"); 
+ 
+    asm volatile ("data_entry"":"); 
+    asm volatile ("stmia r13, {r0-r14}^"); 
+    asm volatile ("sub lr, lr, #8"); 
+    asm volatile ("mov r12, #4"); 
+    asm volatile ("str r12, [r13, #72]"); 
+    asm volatile ("b h_vector_return"); 
+ 
+    asm volatile ("inv_entry"":"); 
+    asm volatile ("stmia r13, {r0-r14}^"); 
+    asm volatile ("sub lr, lr, #4"); 
+    asm volatile ("mov r12, #5"); 
+    asm volatile ("str r12, [r13, #72]"); 
+    asm volatile ("b h_vector_return"); 
+ 
+    asm volatile ("irq_entry"":"); 
+    asm volatile ("stmia r13, {r0-r14}^"); 
+    asm volatile ("sub lr, lr, #4"); 
+    asm volatile ("mov r12, #6"); 
+    asm volatile ("str r12, [r13, #72]"); 
+    asm volatile ("b h_vector_return"); 
+ 
+    asm volatile ("fiq_entry"":"); 
+    asm volatile ("stmia r13, {r0-r14}^"); 
+    asm volatile ("sub lr, lr, #4"); 
+    asm volatile ("mov r12, #7"); 
+    asm volatile ("str r12, [r13, #72]"); 
+    asm volatile ("b h_vector_return"); 
+    CACHE_BT_REGION(BT_CACHE_CAPACITY) 
+    asm volatile (".ltorg"); 
+    asm volatile ("skip_entrycode"":"); 
 }
 
-H_SWITCH_TO(0)
-    H_SWITCH_TO(1)
-    H_SWITCH_TO(2)
-    H_SWITCH_TO(3)
+int 
+h_switch_to(unsigned long trbase, struct v_world *w) 
+{ 
+    struct h_regs *h = &w->hregs; 
+    unsigned int ifar, ifsr, dfar, dfsr; 
+    h_switcher(trbase, w);
+     /*IFAR*/ asm volatile ("mrc p15, 0, %0, c6, c0, 2":"=r" (ifar)); 
+     /*IFSR*/ asm volatile ("mrc p15, 0, %0, c5, c0, 1":"=r" (ifsr)); 
+     /*DFAR*/ asm volatile ("mrc p15, 0, %0, c6, c0, 0":"=r" (dfar)); 
+     /*DFSR*/ asm volatile ("mrc p15, 0, %0, c5, c0, 0":"=r" (dfsr)); 
+
+    H_BT_CACHE_RESTORE(w); 
+    h_perf_tsc_end(H_PERF_TSC_GUEST, 0); 
+    h_perf_tsc_begin(0); 
+    v_perf_inc(V_PERF_WS, 1); 
+    V_LOG("breakpoints %x %x", w->hregs.gcpu.bcr[0], w->hregs.gcpu.bvr[0]); 
+    V_VERBOSE("saved banked regs: %x %x %x %x %x %x %x %x", h->hcpu.r13_fiq, 
+        h->hcpu.r14_fiq, h->hcpu.r13_irq, h->hcpu.r14_irq, 
+        h->hcpu.r13_abt, h->hcpu.r14_abt, h->hcpu.r13_und, h->hcpu.r14_und); 
+    V_VERBOSE("host regs: saved spsr %x, saved sp: %x", 
+        h->hcpu.spsr_save, h->gcpu.save_sp); 
+    V_LOG("Guest WS due to %x. Registers: pc=%x, cpsr=%x(%x), r0=%x, r1=%x, " 
+        "r2=%x, r3=%x, r4=%x, r5=%x, r6=%x, r7=%x, r8=%x, r9=%x, r10=%x, " 
+        "r11=%x, r12=%x, r13=%x, r14 = %x", h->gcpu.reason, h->gcpu.pc, 
+        w->gregs.cpsr, h->gcpu.cpsr, h->gcpu.r0, h->gcpu.r1, h->gcpu.r2, 
+        h->gcpu.r3, h->gcpu.r4, h->gcpu.r5, h->gcpu.r6, h->gcpu.r7, h->gcpu.r8, 
+        h->gcpu.r9, h->gcpu.r10, h->gcpu.r11, h->gcpu.r12, h->gcpu.r13, 
+        h->gcpu.r14); 
+    if ((h->gcpu.reason == 3 || h->gcpu.reason == 4)) { 
+        unsigned int fault = 0; 
+        g_addr_t address = 0; 
+        int bp_hit = 0; 
+        V_LOG("IFAR %x, IFSR %x, DFAR %x, DFSR %x", ifar, ifsr, dfar, dfsr); 
+        if (h->gcpu.reason == 3 && ((ifsr & 0x0d) == 0x0d)) { 
+            V_ERR 
+                ("Unhandled fault. Prefetch fault should never cause permission errors"); 
+            w->status = VM_PAUSED; 
+            time_up = 1; 
+            return 0; 
+        } 
+        /*todo: assert other failures. debug events can't occur on dabt. cannot handle imprecise aborts.*/ 
+        if (h->gcpu.reason == 3) { 
+            int i; 
+            if (g_in_priv(w)) { 
+                if (h_get_bp(w, hostcpu.number_of_breakpoints) != g_get_ip(w) 
+                    && (w->hregs.gcpu.bcr[hostcpu.number_of_breakpoints] & 1)) { 
+                    bp_hit = 1; 
+                    v_perf_inc(V_PERF_BT, 1); 
+                    v_do_bp(w, g_get_ip(w), 1); 
+                    h_perf_tsc_end(H_PERF_TSC_BT, 0); 
+                } else { 
+                    for (i = 0; i < hostcpu.number_of_breakpoints; i++) { 
+                        if (h_get_bp(w, i) == g_get_ip(w)) { 
+                            bp_hit = 1; 
+                            V_EVENT("Breakpoint %x hit at %x", i, g_get_ip(w)); 
+                            v_perf_inc(V_PERF_BT, 1); 
+                            v_do_bp(w, g_get_ip(w), 0); 
+                            h_perf_tsc_end(H_PERF_TSC_BT, 0); 
+                            break; 
+                        } 
+                    } 
+                } 
+            } 
+            fault = V_MM_FAULT_NP; 
+            address = ifar; 
+        } else if (h->gcpu.reason == 4) { 
+            fault = ((dfsr & 0x0d) == 0x0d) ? V_MM_FAULT_W : V_MM_FAULT_NP; 
+            fault |= ((dfsr & 0x800) ? V_MM_FAULT_W : 0); 
+            address = dfar; 
+        } 
+ 
+        if (!bp_hit) { 
+            v_perf_inc(V_PERF_PF, 1); 
+            if ((fault = v_pagefault(w, address, fault)) != V_MM_FAULT_HANDLED) { 
+                V_ERR("Guest injection of page fault %x, %x, %x, %x", dfar, 
+                    ifar, dfsr, ifsr); 
+                w->gregs.p15_dfar = dfar; 
+                w->gregs.p15_ifar = ifar; 
+                w->gregs.p15_dfsr = dfsr; 
+                w->gregs.p15_ifsr = ifsr; 
+                h_inject_int(w, h->gcpu.reason); 
+            } 
+            h_perf_tsc_end(H_PERF_TSC_PF, 0); 
+        } 
+/*              return 1;*/
+    } else if (h->gcpu.reason == 1) { 
+        if (g_in_priv(w) || (w->gregs.cpsr & G_PRIV_MASK) == G_PRIV_RST) { 
+            v_perf_inc(V_PERF_PI, 1); 
+            h_do_fail_inst(w, g_get_ip(w)); 
+            h_perf_tsc_end(H_PERF_TSC_PI, 0); 
+        } else { 
+            w->status = VM_PAUSED; 
+            h_do_fail_inst(w, g_get_ip(w)); 
+            h_inject_int(w, 1); 
+        } 
+    } else if (h->gcpu.reason == 2) { 
+        if (!((w->gregs.cpsr & G_PRIV_MASK) == G_PRIV_RST)) { 
+            if (umtest == 0 && h->gcpu.r6 == 0xdeadbeef) { 
+                V_ERR("Usermode test start"); 
+                v_perf_init(); 
+                h_perf_init(); 
+                asm volatile ("mrc p15, 0, %0, c9, c13, 0":"=r" (umtest1)); 
+                umtest = 1; 
+            } else 
+            if (umtest > 0 && h->gcpu.r6 == 0xdeadbeef) { 
+                umtest++; 
+                if (h->gcpu.pc == 0x8110 || umtest >= 0x9998) { 
+                    int ii; 
+                    V_ERR("Usermode test done %x", umtest); 
+                    w->status = VM_PAUSED; 
+                    asm volatile ("mrc p15, 0, %0, c9, c13, 0":"=r" (umtest2)); 
+                    V_ERR("%x \n  - %x\n ^^^", umtest1, umtest2); 
+                    umtest = 0; 
+                    for (ii = 0; ii < V_PERF_COUNT; ii++) V_ERR("VM perf %x: %lx", ii, v_perf_get(ii)); 
+                    for (ii = 0; ii < H_PERF_COUNT; ii++) V_ERR("Host perf %x: %lx", ii, h_perf_get(ii)); 
+                    for (ii = 0; ii < H_TSC_COUNT; ii++) V_ERR("TSC %x: %llx", ii, h_tsc_get(ii)); 
+                } 
+            } else {
+                V_ERR("Guest sys call @ %x, with %x %x %x", h->gcpu.pc, h->gcpu.r0, 
+                    h->gcpu.r1, h->gcpu.r2); 
+            } 
+            h_inject_int(w, 2); 
+            h_perf_tsc_end(H_PERF_TSC_PI, 0); 
+        } 
+    } else if (h->gcpu.reason == 6) { 
+        if (!(w->gregs.cpsr & H_CPSR_I)) { 
+            if (last_poke + 100 < poke) { 
+                last_poke = poke; 
+                ack_pic_once = 1; 
+                h_inject_int(w, 6); 
+            } 
+        } 
+        time_up = 1; 
+    } 
+ 
+
+    return 0; 
+}
 
 int
 h_read_guest(struct v_world *world, unsigned int addr, unsigned int *word)

@@ -40,8 +40,10 @@
 #define P15_CTRL_M (1 << 0)
 
 struct h_regs;
+struct v_world;
 
 struct h_cpu {
+    void (*switcher)(unsigned long, struct v_world *);
     unsigned int domain;
     void *p_drar;
     unsigned int p15_id;
@@ -105,10 +107,8 @@ int h_cpu_init(void);
 
 /* switch to this translation base */
 struct v_world;
-int h_switch_to0(unsigned long, struct v_world *);
-int h_switch_to1(unsigned long, struct v_world *);
-int h_switch_to2(unsigned long, struct v_world *);
-int h_switch_to3(unsigned long, struct v_world *);
+void h_switcher(unsigned long, struct v_world *);
+int h_switch_to(unsigned long, struct v_world *);
 void h_cpu_save(struct v_world *);
 int h_access_guest(struct v_world *, unsigned int, unsigned int *);
 

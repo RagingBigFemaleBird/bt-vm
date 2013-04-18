@@ -400,7 +400,7 @@ void
 h_fault_bridge_pages(struct v_world *w, unsigned long virt)
 {
     virt = virt & H_PFN_MASK;
-    if (virt == ((unsigned int) (w->npage) & H_PFN_MASK)) {
+    if (virt == ((unsigned int) (w->hregs.hcpu.switcher) & H_PFN_MASK)) {
         h_relocate_npage(w);
         return;
     }
@@ -414,7 +414,7 @@ unsigned int
 h_check_bridge_pages(struct v_world *w, unsigned long virt)
 {
     virt = virt & H_PFN_MASK;
-    if (virt == ((unsigned int) (w->npage) & H_PFN_MASK)) {
+    if (virt == ((unsigned int) (w->hregs.hcpu.switcher) & H_PFN_MASK)) {
         V_ERR("Conflicting npage");
         return 1;
     }
@@ -457,7 +457,7 @@ h_inv_pagetable(struct v_world *world, struct v_spt_info *spt,
 {
     void *htrv;
     unsigned int i, j;
-    int (*npage) (unsigned long, struct v_world *) = world->npage;
+    void (*npage) (unsigned long, struct v_world *) = world->hregs.hcpu.switcher;
     for (i = 0; i < (1 << H_TRBASE_ORDER); i++) {
 
         htrv = h_allocv(spt->spt_paddr + i * H_PAGE_SIZE);
@@ -514,7 +514,7 @@ h_new_trbase(struct v_world *world)
     struct v_chunk *trbase;
     struct v_spt_info *spt;
     void *htrv;
-    int (*npage) (unsigned long, struct v_world *) = world->npage;
+    void (*npage) (unsigned long, struct v_world *) = world->hregs.hcpu.switcher;
     int i;
     unsigned int p15 =
         (world->gregs.mode ==
