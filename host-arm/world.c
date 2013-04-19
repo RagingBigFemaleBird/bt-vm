@@ -39,7 +39,8 @@ h_world_init(struct v_world *world)
         h_v2p((unsigned int) world), 1, V_PAGE_W | V_PAGE_VM);
     V_LOG("world data at %lx, pa %x", world, h_v2p((unsigned int) world));
     h_set_map(world->htrbase, (long unsigned int) world->hregs.hcpu.switcher,
-        h_v2p((unsigned int) world->hregs.hcpu.switcher), 1, V_PAGE_W | V_PAGE_VM);
+        h_v2p((unsigned int) world->hregs.hcpu.switcher), 1,
+        V_PAGE_W | V_PAGE_VM);
     V_LOG("neutral page at %p, pa %lx\n", world->hregs.hcpu.switcher,
         h_v2p((unsigned int) world->hregs.hcpu.switcher));
     world->hregs.gcpu.pc = G_PA_BASE + 0x8000;
@@ -76,12 +77,14 @@ h_relocate_npage(struct v_world *w)
     if (spt == NULL) {
         h_set_map(w->htrbase, oldnp, 0, 1, V_PAGE_NOMAP);
         h_set_map(w->htrbase, (unsigned long) w->hregs.hcpu.switcher,
-            h_v2p((unsigned long) w->hregs.hcpu.switcher), 1, V_PAGE_W | V_PAGE_VM);
+            h_v2p((unsigned long) w->hregs.hcpu.switcher), 1,
+            V_PAGE_W | V_PAGE_VM);
     } else
         while (spt != NULL) {
             h_set_map(spt->spt_paddr, oldnp, 0, 1, V_PAGE_NOMAP);
             h_set_map(spt->spt_paddr, (unsigned long) w->hregs.hcpu.switcher,
-                h_v2p((unsigned long) w->hregs.hcpu.switcher), 1, V_PAGE_W | V_PAGE_VM);
+                h_v2p((unsigned long) w->hregs.hcpu.switcher), 1,
+                V_PAGE_W | V_PAGE_VM);
             spt = spt->next;
         }
 }

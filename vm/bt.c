@@ -29,6 +29,7 @@
 #include "host/include/perf.h"
 #include "vm/include/world.h"
 #include "vm/include/lru_cache.h"
+//#define __DEBUG_BT_CACHE
 
 /**
  * @in addr virtual address
@@ -145,7 +146,7 @@ v_add_ipoi(struct v_world *world, unsigned int addr, unsigned int key,
     struct v_ipoi *i = mpage->ipoi_list;
     if (mpage == NULL) {
         world->status = VM_PAUSED;
-        V_ERR("Error: guest page fault\n");
+        V_ERR("Error: guest page fault @ add_ipoi\n");
         return;
     }
     while (i != NULL) {
@@ -191,9 +192,12 @@ v_add_poi(struct v_page *mpage, unsigned int addr,
     poi->invalidate_cached_plan_count = 0;
     poi->cache_threshold = 0;
 #endif
-    if (type & V_INST_PB) v_perf_inc(V_PERF_POI_PB, 1);
-    if (type & V_INST_CB) v_perf_inc(V_PERF_POI_CB, 1);
-    if (type & V_INST_F) v_perf_inc(V_PERF_POI_F, 1);
+    if (type & V_INST_PB)
+        v_perf_inc(V_PERF_POI_PB, 1);
+    if (type & V_INST_CB)
+        v_perf_inc(V_PERF_POI_CB, 1);
+    if (type & V_INST_F)
+        v_perf_inc(V_PERF_POI_F, 1);
     mpage->poi_list = poi;
     return poi;
 }
@@ -783,7 +787,7 @@ v_do_bp(struct v_world *world, unsigned long addr, unsigned int is_step)
     h_perf_tsc_end(H_PERF_TSC_MAPPING, 1);
     if (mpage == NULL) {
         world->status = VM_PAUSED;
-        V_ERR("Error: guest page fault\n");
+        V_ERR("Error: guest page fault @ v_do_bp, %x, %x\n", ip, phys);
         return;
     }
     if (!is_step) {
@@ -806,6 +810,9 @@ v_do_bp(struct v_world *world, unsigned long addr, unsigned int is_step)
         if (!(ip == world->poi->addr)) {
 #ifdef BT_CACHE
             v_update_pb_cache(world, world->poi->addr, ip);
+#ifdef __DEBUG_BT_CACHE
+            V_ERR("update %x is %x", world->poi->addr, ip);
+#endif
             if (world->poi->invalidate_cached_plan_count > 0) {
                 int r;
                 for (r = 0; r < world->poi->invalidate_cached_plan_count; r++) {
@@ -876,13 +883,13 @@ v_bt(struct v_world *world)
     h_perf_tsc_end(H_PERF_TSC_MAPPING, 1);
     if (phys >= world->pa_top) {
         world->status = VM_PAUSED;
-        V_ERR("Error: guest page fault\n");
+        V_ERR("Error: guest page fault @ v_bt, crazy phys addr\n");
         return;
     }
     mpage = h_p2mp(world, phys);
     if (mpage == NULL) {
         world->status = VM_PAUSED;
-        V_ERR("Error: guest page fault\n");
+        V_ERR("Error: guest page fault @ v_bt, %x, %x\n", ip, phys);
         return;
     }
 
@@ -943,12 +950,11 @@ v_bt(struct v_world *world)
 }
 
 #ifdef BT_CACHE
-
 void
 _v_bt_cache(struct v_world *world, struct v_poi *poi, int depth,
     struct v_poi_cached_tree_plan_container *cache, int *cache_count)
 {
-    int i, j, total, r;
+    int i, j, total = 0, r;
     unsigned int cache_addr;
     struct v_poi *todo_poi[H_DEBUG_MAX_BP];
     if (depth >= BT_CACHE_LEVEL)
@@ -964,25 +970,27 @@ _v_bt_cache(struct v_world *world, struct v_poi *poi, int depth,
     cache_addr = poi->addr;
     while (poi->type & V_INST_I)
         poi = poi->next_inst;
-    if (!(poi->type & V_INST_CB))
-        return;
-    if (poi->tree == NULL) {
+    if (poi->type & V_INST_CB) {
+        if (poi->tree == NULL) {
+            h_perf_tsc_begin(1);
+            v_poi_construct_tree(world, poi);
+            h_perf_tsc_end(H_PERF_TSC_TREE, 1);
+            V_VERBOSE("Tree construction done");
+        }
         h_perf_tsc_begin(1);
-        v_poi_construct_tree(world, poi);
-        h_perf_tsc_end(H_PERF_TSC_TREE, 1);
-        V_VERBOSE("Tree construction done");
-    }
-    h_perf_tsc_begin(1);
-    v_poi_plan_bp(world, poi, H_DEBUG_MAX_BP);
-    h_perf_tsc_end(H_PERF_TSC_PLAN, 1);
-    total = world->current_valid_bps;
-    for (i = 0; i < total; i++) {
-        todo_poi[i] = world->bp_to_poi[i];
+        v_poi_plan_bp(world, poi, H_DEBUG_MAX_BP);
+        h_perf_tsc_end(H_PERF_TSC_PLAN, 1);
+        total = world->current_valid_bps;
+        for (i = 0; i < total; i++) {
+            todo_poi[i] = world->bp_to_poi[i];
+        }
     }
     cache->plan[*cache_count].addr = cache_addr;
     cache->plan[*cache_count].plan = &poi->plan;
     cache->plan[*cache_count].poi = poi;
     *cache_count = (*cache_count) + 1;
+    if (!(poi->type & V_INST_CB))
+        return;
     for (i = 0; i < total; i++) {
         if (todo_poi[i]->type & V_INST_CB) {
             V_VERBOSE("Recursively do %lx", todo_poi[i]->addr);
@@ -1023,6 +1031,9 @@ _v_bt_cache(struct v_world *world, struct v_poi *poi, int depth,
                     struct v_poi *possible_poi;
                     if (mpage == NULL)
                         continue;
+#ifdef __DEBUG_BT_CACHE
+                    V_ERR("pb target %x", possible_ip);
+#endif
                     possible_poi = v_find_poi(mpage, possible_ip);
                     if (possible_poi == NULL)
                         continue;
@@ -1072,7 +1083,7 @@ v_bt_cache(struct v_world *world)
     } else {
 #ifdef __DEBUG_BT_CACHE
         if (lastcache == cache)
-            V_ERR("%p staring", cache);
+            V_ERR("%p starting", cache);
 #endif
         for (i = 0; i < total; i++) {
             save_poi[i] = world->bp_to_poi[i];
@@ -1081,6 +1092,7 @@ v_bt_cache(struct v_world *world)
             struct lru_cache_entry *find =
                 lru_cache_find32(world->pb_cache, world->poi->addr);
 #ifdef __DEBUG_BT_CACHE
+            lastcache = cache;
             if (lastcache == cache)
                 V_ERR("Root pb %x", world->poi->addr);
 #endif
@@ -1170,11 +1182,20 @@ v_bt_cache(struct v_world *world)
                         unsigned long phys = g_v2p(world, possible_ip, 1);
                         struct v_page *mpage = h_p2mp(world, phys);
                         struct v_poi *possible_poi;
+#ifdef __DEBUG_BT_CACHE
+                        V_ERR("pb target %x", possible_ip);
+#endif
                         if (mpage == NULL)
                             continue;
+#ifdef __DEBUG_BT_CACHE
+                        V_ERR("mpage %x", mpage);
+#endif
                         possible_poi = v_find_poi(mpage, possible_ip);
                         if (possible_poi == NULL)
                             continue;
+#ifdef __DEBUG_BT_CACHE
+                        V_ERR("poi %x", possible_poi->type);
+#endif
                         V_VERBOSE("Found poi %lx for %lx", possible_poi->addr,
                             save_poi[i]->addr);
                         _v_bt_cache(world, possible_poi, 0, cache,

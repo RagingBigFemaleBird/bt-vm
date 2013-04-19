@@ -457,7 +457,8 @@ h_inv_pagetable(struct v_world *world, struct v_spt_info *spt,
 {
     void *htrv;
     unsigned int i, j;
-    void (*npage) (unsigned long, struct v_world *) = world->hregs.hcpu.switcher;
+    void (*npage) (unsigned long, struct v_world *) =
+        world->hregs.hcpu.switcher;
     for (i = 0; i < (1 << H_TRBASE_ORDER); i++) {
 
         htrv = h_allocv(spt->spt_paddr + i * H_PAGE_SIZE);
@@ -514,7 +515,8 @@ h_new_trbase(struct v_world *world)
     struct v_chunk *trbase;
     struct v_spt_info *spt;
     void *htrv;
-    void (*npage) (unsigned long, struct v_world *) = world->hregs.hcpu.switcher;
+    void (*npage) (unsigned long, struct v_world *) =
+        world->hregs.hcpu.switcher;
     int i;
     unsigned int p15 =
         (world->gregs.mode ==

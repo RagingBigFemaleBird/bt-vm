@@ -43,7 +43,7 @@ struct h_regs;
 struct v_world;
 
 struct h_cpu {
-    void (*switcher)(unsigned long, struct v_world *);
+    void (*switcher) (unsigned long, struct v_world *);
     unsigned int domain;
     void *p_drar;
     unsigned int p15_id;
