@@ -149,15 +149,23 @@ h_bt_cache_restore(struct v_world *world)
         world->poi = hcache[total - set].poi;
         world->poi->expect = 0;
         V_LOG("BT restore poi to %lx", world->poi->addr);
-        world->current_valid_bps = world->poi->plan.count;
-        dr7 = world->hregs.gcpu.dr7 & 0xffffff00;
-        for (set = 0; set < world->poi->plan.count; set++) {
-            unsigned int *bpreg = &world->hregs.gcpu.dr0;
-            dr7 |= (0x700 | (3 << (set * 2)));
-            world->bp_to_poi[set] = world->poi->plan.poi[set];
-            bpreg[set] = world->bp_to_poi[set]->addr;
+        if (world->poi->type & V_INST_CB) {
+            world->current_valid_bps = world->poi->plan.count;
+            dr7 = world->hregs.gcpu.dr7 & 0xffffff00;
+            for (set = 0; set < world->poi->plan.count; set++) {
+                unsigned int *bpreg = &world->hregs.gcpu.dr0;
+                dr7 |= (0x700 | (3 << (set * 2)));
+                world->bp_to_poi[set] = world->poi->plan.poi[set];
+                bpreg[set] = world->bp_to_poi[set]->addr;
+            }
+            world->hregs.gcpu.dr7 = dr7;
+        } else {
+            world->current_valid_bps = 1;
+            world->hregs.gcpu.dr7 = world->hregs.gcpu.dr7 & 0xffffff00;
+            world->hregs.gcpu.dr7 = world->hregs.gcpu.dr7 | 0x703;
+            world->bp_to_poi[0] = world->poi;
+            world->hregs.gcpu.dr0 = world->poi->addr;
         }
-        world->hregs.gcpu.dr7 = dr7;
     } else if (pb_total != 0 && pb_set != 0) {
         h_pb_cache = (struct h_bt_pb_cache *) (cache + __PB_START);
         world->poi = h_pb_cache[pb_total - pb_set].poi;
@@ -211,33 +219,62 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
     if (count != 0) {
         hcache = (struct h_bt_cache *) (cache + __CB_START);
         for (i = 0; i < count; i++) {
-            int j;
+            int j = 0;
             hcache[i].poi = plan[i].poi;
             hcache[i].addr = plan[i].addr;
             hcache[i].dr7 = world->hregs.gcpu.dr7 & (0xffffff00);
-            for (j = 0; j < plan[i].plan->count; j++) {
+            if (!(plan[i].poi->type & V_INST_CB)) {
+                /* todo: implement monitor page fault handler and enable better caching */
                 unsigned int *bp = &hcache[i].dr0;
-                hcache[i].dr7 |= (0x700 | (2 << (j * 2)));
-                *(bp + j) = plan[i].plan->poi[j]->addr;
-                if ((plan[i].plan->poi[j]->type & V_INST_PB)
+                hcache[i].dr7 |= (0x700 | (3 << (j * 2)));
+                *(bp + j) = plan[i].poi->addr;
+                if ((plan[i].poi->type & V_INST_PB)
                     && pb_total <= 2 * BT_CACHE_CAPACITY) {
                     int k;
                     for (k = 0; k < pb_total; k++) {
-                        if (pb_cache[k].addr == plan[i].plan->poi[j]->addr) {
-                            goto found;
+                        if (pb_cache[k].addr == plan[i].poi->addr) {
+                            goto found2;
                         }
                     }
-                    pb_cache[pb_total].addr = plan[i].plan->poi[j]->addr;
-                    pb_cache[pb_total].poi = plan[i].plan->poi[j];
+                    pb_cache[pb_total].addr = plan[i].poi->addr;
+                    pb_cache[pb_total].poi = plan[i].poi;
                     V_VERBOSE("cache %x is %lx", pb_total,
                         pb_cache[pb_total].addr);
                     pb_total++;
-                  found:
+                  found2:
                     asm volatile ("nop");
+/*
                 }
-                V_VERBOSE("bp %x is %x", j, *(bp + j));
+                if (plan[i].poi->addr == plan[i].addr) {
+*/
+                } else {
+                    hcache[i].addr = 0x0;
+                }
+            } else {
+                for (j = 0; j < plan[i].plan->count; j++) {
+                    unsigned int *bp = &hcache[i].dr0;
+                    hcache[i].dr7 |= (0x700 | (3 << (j * 2)));
+                    *(bp + j) = plan[i].plan->poi[j]->addr;
+                    if ((plan[i].plan->poi[j]->type & V_INST_PB)
+                        && pb_total <= 2 * BT_CACHE_CAPACITY) {
+                        int k;
+                        for (k = 0; k < pb_total; k++) {
+                            if (pb_cache[k].addr == plan[i].plan->poi[j]->addr) {
+                                goto found;
+                            }
+                        }
+                        pb_cache[pb_total].addr = plan[i].plan->poi[j]->addr;
+                        pb_cache[pb_total].poi = plan[i].plan->poi[j];
+                        V_VERBOSE("cache %x is %lx", pb_total,
+                            pb_cache[pb_total].addr);
+                        pb_total++;
+                      found:
+                        asm volatile ("nop");
+                    }
+                    V_VERBOSE("bp %x is %x", j, *(bp + j));
+                }
+                V_VERBOSE("dr7 is %x", hcache[i].dr7);
             }
-            V_VERBOSE("dr7 is %x", hcache[i].dr7);
         }
     }
     for (i = 0; i < world->current_valid_bps; i++) {
@@ -993,8 +1030,8 @@ h_delete_trbase(struct v_world *world)
 static void
 h_inv_pagetable(struct v_world *world, struct v_spt_info *spt,
     g_addr_t virt, unsigned int level)
-//careful, when inv virt, check against known bridge pages
 {
+//careful, when inv virt, check against known bridge pages
     void *htrv;
     unsigned int i, j;
     for (i = 0; i < (1 << H_TRBASE_ORDER); i++) {
@@ -1030,7 +1067,7 @@ h_inv_pagetable(struct v_world *world, struct v_spt_info *spt,
 void
 h_inv_spt(struct v_world *world, struct v_spt_info *spt)
 {
-//todo: careful, when inv virt, check against known bridge pages
+//careful, when inv virt, check against known bridge pages
     struct v_inv_entry **p = &(spt->inv_list);
     while ((*p) != NULL) {
         struct v_inv_entry *psave = (*p);

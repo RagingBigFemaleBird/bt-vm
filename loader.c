@@ -415,7 +415,6 @@ init_module(void)
 {
     int result, err;
     dev_t dev = MKDEV(btc_major, 0);
-    get_cpu();
     if (btc_major)
         result = register_chrdev_region(dev, 1, "btc");
     else {
@@ -479,7 +478,6 @@ cleanup_module(void)
     del_timer(&my_timer);
     cdev_del(&btc_device.cdev);
     unregister_chrdev_region(MKDEV(btc_major, 0), 1);
-    put_cpu();
     V_EVENT("Exit.\n");
 }
 
