@@ -548,8 +548,8 @@ g_do_int(struct v_world *world, unsigned int param)
                 world->hregs.gcpu.eax = 0x8600;
                 break;
             case 0x88:
-                world->hregs.gcpu.eflags &= ~(H_EFLAGS_CF);     /* return 8MB */
-                world->hregs.gcpu.eax = 8192 - 1024;
+                world->hregs.gcpu.eflags &= ~(H_EFLAGS_CF);     /* return 16MB */
+                world->hregs.gcpu.eax = 16384 - 1024;
                 V_ALERT("INT: Get memory map, 80");
                 break;
             case 0xe8:
@@ -565,7 +565,7 @@ g_do_int(struct v_world *world, unsigned int param)
                     world->hregs.gcpu.eflags &= (~H_EFLAGS_CF);
                     err |= h_write_guest(world, addr, 0);
                     err |= h_write_guest(world, addr + 4, 0);
-                    err |= h_write_guest(world, addr + 8, 0x800000);    /* return 8MB */
+                    err |= h_write_guest(world, addr + 8, 0x1000000);   /* return 16MB */
                     err |= h_write_guest(world, addr + 12, 0);
                     err |= h_write_guest(world, addr + 16, 0);
                     if (err) {

@@ -458,7 +458,14 @@ init_module(void)
 
     V_LOG("/proc/%s created\n", PROCFS_NAME);
 
-    w_list = v_create_world(0x4000 /*000 */ );
+    w_list = v_create_world(
+#ifdef CONFIG_X86
+        0x10000                 /* pages */
+#endif
+#ifdef CONFIG_ARM
+        0x4000                  /* pages */
+#endif
+        );
     V_LOG("w = %p, w.trbase = %lx\n", w_list, w_list->htrbase);
 
     init_timer(&my_timer);
