@@ -79,4 +79,5 @@ void h_fault_bridge_pages(struct v_world *, unsigned long);
 
 void h_delete_trbase(struct v_world *);
 void h_new_trbase(struct v_world *);
+void h_inv_pagetables(struct v_world *, unsigned int);
 #endif

@@ -452,6 +452,17 @@ h_delete_trbase(struct v_world *world)
 }
 
 void
+h_inv_pagetables(struct v_world *world, unsigned int virt)
+{
+    unsigned int phys = g_v2p(world, virt, 1);
+    struct v_page *mpage = h_p2mp(world, phys);
+    if (mpage == NULL)
+        return;
+    v_spt_inv_page(world, mpage);
+}
+
+
+void
 h_inv_pagetable(struct v_world *world, struct v_spt_info *spt,
     unsigned long virt, unsigned int level)
 {

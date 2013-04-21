@@ -1447,20 +1447,44 @@ h_do_fail_inst(struct v_world *world, unsigned long ip)
                 break;
             case 7:
                 h_perf_inc(H_PERF_CACHE, 1);
+                if (crm == 0x0a && opc1 == 0 && opc2 == 1) {
+                    if (!dir) {
+                        unsigned int virt = *rdreg;
+                        asm volatile ("mcr p15, 0, %0, c7, c10, 1"::"r" (virt));
+                        h_inv_pagetables(world, virt);
+                    }
+                    goto processed;
+                }
+                if (crm == 0x0e && opc1 == 0 && opc2 == 2) {
+                    if (!dir) {
+                        unsigned int virt = *rdreg;
+                        asm volatile ("mcr p15, 0, %0, c7, c14, 2"::"r" (virt));
+                    }
+                    goto processed;
+                }
+                if (crm == 0x0e && opc1 == 0 && opc2 == 1) {
+                    if (!dir) {
+                        unsigned int virt = *rdreg;
+                        asm volatile ("mcr p15, 0, %0, c7, c14, 1"::"r" (virt));
+                    }
+                    goto processed;
+                }
+                if (crm == 0x5 && opc1 == 0 && opc2 == 0) {
+                    if (!dir) {
+                        unsigned int virt = *rdreg;
+                        asm volatile ("mcr p15, 0, %0, c7, c5, 0"::"r" (virt));
+                    }
+                    goto processed;
+                }
+                if (crm == 0x5 && opc1 == 0 && opc2 == 1) {
+                    if (!dir) {
+                        unsigned int virt = *rdreg;
+                        asm volatile ("mcr p15, 0, %0, c7, c5, 1"::"r" (virt));
+                    }
+                    goto processed;
+                }
                 flush_cache_all();
                 //cache op
-                if (crm == 0x0e && opc1 == 0 && opc2 == 2) {
-                    goto processed;
-                }
-                if (crm == 0x0e && opc1 == 1 && opc2 == 0) {
-                    goto processed;
-                }
-                if (crm == 5 && opc1 == 0 && opc2 == 0) {
-                    goto processed;
-                }
-                if (crm == 0x0a && opc1 == 0 && opc2 == 1) {
-                    goto processed;
-                }
                 goto processed;
                 break;
             case 8:
