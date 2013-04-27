@@ -77,6 +77,14 @@ v_page_make_present(struct v_page *mpage)
     return virt;
 }
 
+void
+v_validate_guest_virt(struct v_world *world, g_addr_t addr)
+{
+    if (h_get_map(world->htrbase, addr) == 0) {
+        v_pagefault(world, addr, V_MM_FAULT_NP);
+    }
+}
+
 /**
  * @in delay TODO: delays in calling handler. 0 is instant
  *

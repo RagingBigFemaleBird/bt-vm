@@ -117,5 +117,5 @@ void v_spt_add(struct v_world *, h_addr_t, g_addr_t);
 struct v_spt_info *v_spt_get_by_spt(struct v_world *, h_addr_t);
 struct v_spt_info *v_spt_get_by_gpt(struct v_world *, g_addr_t);
 void v_spt_inv_page(struct v_world *, struct v_page *);
-
+void v_validate_guest_virt(struct v_world *, g_addr_t);
 #endif

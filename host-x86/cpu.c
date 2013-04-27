@@ -255,6 +255,7 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
                     unsigned int *bp = &hcache[i].dr0;
                     hcache[i].dr7 |= (0x700 | (3 << (j * 2)));
                     *(bp + j) = plan[i].plan->poi[j]->addr;
+                    v_validate_guest_virt(world, plan[i].plan->poi[j]->addr);
                     if ((plan[i].plan->poi[j]->type & V_INST_PB)
                         && pb_total <= 2 * BT_CACHE_CAPACITY) {
                         int k;
@@ -432,6 +433,7 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
     asm volatile ("mov %ss:44(%esp), %ecx"); \
     asm volatile ("cmp $0xc0108715, %ecx"); \
     asm volatile ("je 200f"); \
+    asm volatile ("jmp 8b"); \
     asm volatile ("test %edi, %edi"); \
     asm volatile ("jnz 8b"); \
     asm volatile ("jmp 200f");
@@ -1609,6 +1611,8 @@ h_inject_int(struct v_world *world, unsigned int int_no)
             int i;
             usermode_test_done--;
             if (usermode_test_done <= 0) {
+                usermode_test_done = 9999;
+                usermode_tests_reset = 1;
                 V_ERR("Usermode test done counters!");
                 for (i = 0; i < V_PERF_COUNT; i++) {
                     V_ERR("VM Perf Counter %x, %lx", i, v_perf_get(i));

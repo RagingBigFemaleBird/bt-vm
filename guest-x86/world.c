@@ -328,7 +328,7 @@ g_do_io(struct v_world *world, unsigned int dir, unsigned int address,
         break;
     default:
       io_not_handled:
-        V_ERR("unhandled IO %s port %x DATA=%x",
+        V_ALERT("unhandled IO %s port %x DATA=%x",
             (dir == G_IO_IN) ? "in" : "out", address, *(unsigned char *) param);
     }
     return 0;

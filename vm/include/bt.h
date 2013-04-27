@@ -39,9 +39,9 @@ struct v_poi_tree_plan {
 };
 #define BT_CACHE
 #define BT_CACHE_LEVEL 16
-#define BT_CACHE_CAPACITY 16
+#define BT_CACHE_CAPACITY 36
 #define BT_CACHE_TARGET_ENTRIES_TOTAL 4
-#define BT_CACHE_INVALIDATE_ENTRIES_COUNT 4
+#define BT_CACHE_INVALIDATE_ENTRIES_COUNT 16
 
 struct cache_target_payload {
     unsigned int total;
@@ -62,6 +62,14 @@ struct v_poi_cached_tree_plan_container {
     void *exec_cache;
 };
 
+#define V_POI_PB_CACHE_ENTIRES_TOTAL 6
+struct v_poi_pb_cache {
+    unsigned int total;
+    unsigned int replace;
+    unsigned int targets[V_POI_PB_CACHE_ENTIRES_TOTAL];
+};
+
+
 struct v_poi {
     unsigned int type;
     unsigned int ex_mode;
@@ -81,6 +89,7 @@ struct v_poi {
      *invalidate_cached_plan[BT_CACHE_INVALIDATE_ENTRIES_COUNT];
     int invalidate_cached_plan_count;
     int cache_threshold;
+    struct v_poi_pb_cache pb_cache;
 #endif
 };
 
