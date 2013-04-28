@@ -433,7 +433,6 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
     asm volatile ("mov %ss:44(%esp), %ecx"); \
     asm volatile ("cmp $0xc0108715, %ecx"); \
     asm volatile ("je 200f"); \
-    asm volatile ("jmp 8b"); \
     asm volatile ("test %edi, %edi"); \
     asm volatile ("jnz 8b"); \
     asm volatile ("jmp 200f");
