@@ -25,6 +25,25 @@ extern struct h_cpu hostcpu;
 extern void trap_start(void);
 extern void h_switcher(unsigned long trbase, struct v_world *w);
 
+static void
+h_monitor_fault_check_fixup(struct v_world *world)
+{
+    int monitor_offset;
+    int monitor_stack_offset;
+    unsigned int h_switcher_page = (unsigned int) world->hregs.hcpu.switcher;
+    monitor_offset =
+        (unsigned int) monitor_fault_entry_check - (unsigned int) h_switcher;
+    monitor_stack_offset =
+        offsetof(struct v_world, hregs) + offsetof(struct h_regs,
+        gcpu) + offsetof(struct h_cpu, intr) + (unsigned int) world;
+    *(unsigned int *) (h_switcher_page + monitor_offset + 2) =
+        monitor_stack_offset;
+    *(unsigned int *) (h_switcher_page + monitor_offset + 6 + 2 + 1) =
+        monitor_stack_offset - 8 * 4 - 4;
+    V_ERR("fixing monitor stack check @%x to %x",
+        h_switcher_page + monitor_offset, monitor_stack_offset);
+}
+
 void
 h_world_init(struct v_world *world)
 {
@@ -39,9 +58,9 @@ h_world_init(struct v_world *world)
     int i;
     unsigned int traddr;
     struct h_regs *h = &world->hregs;
-
     world->npage = h_switch_to;
     world->hregs.hcpu.switcher = h_switcher;
+    h_monitor_fault_check_fixup(world);
     h_pin(h_v2p((h_addr_t) world));
 
     h_set_map(world->htrbase, (long unsigned int) world,
@@ -171,10 +190,11 @@ h_relocate_npage(struct v_world *w)
     struct v_chunk *chunk = h_raw_palloc(0);
     unsigned int phys = chunk->phys;
     void *virt = h_allocv(phys);
-
     h_memcpy(virt, w->hregs.hcpu.switcher, 4096);
-
     w->hregs.hcpu.switcher = virt;
+
+    h_monitor_fault_check_fixup(w);
+
     trap =
         (void (*)(void)) ((((unsigned int) trap_start) & H_POFF_MASK) +
         (((unsigned int) virt) & H_PFN_MASK));
@@ -285,7 +305,7 @@ h_relocate_world(struct v_world *w, struct v_world *w_new)
         h_set_map(w->htrbase, (long unsigned int) w, 0, 1, V_PAGE_NOMAP);
         h_set_map(w->htrbase, (long unsigned int) w_new,
             h_v2p((h_addr_t) w_new), 1, V_PAGE_W | V_PAGE_VM);
-    } else
+    } else {
         while (spt != NULL) {
             h_set_map(spt->spt_paddr, (long unsigned int) w, 0, 1,
                 V_PAGE_NOMAP);
@@ -293,4 +313,6 @@ h_relocate_world(struct v_world *w, struct v_world *w_new)
                 h_v2p((h_addr_t) w_new), 1, V_PAGE_W | V_PAGE_VM);
             spt = spt->next;
         }
+    }
+    h_monitor_fault_check_fixup(w);
 }

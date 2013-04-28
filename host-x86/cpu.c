@@ -693,6 +693,15 @@ h_switcher(unsigned long trbase, struct v_world *w)
     asm volatile ("push $0xbeef");      /* some impossible value */
 
     asm volatile ("3:");
+    asm volatile (".global monitor_fault_entry_check");
+    asm volatile ("monitor_fault_entry_check:");
+    /* following code must be in sync with world.c init and relocation code */
+    asm volatile ("cmp $0x12345678, %esp");
+    asm volatile ("je 180f");
+    asm volatile ("mov $0x12345678, %esp");
+    asm volatile ("jmp 8f");
+    asm volatile ("180:");
+    /* */
     GP_FAULT_QUICKPATH;
 
     asm volatile ("sub $4, %esp");
@@ -755,8 +764,6 @@ h_switcher(unsigned long trbase, struct v_world *w)
     asm volatile (".global restoreCS");
     asm volatile ("restoreCS:":::"memory", "cc");
 
-    h->gcpu.ds = h->gcpu.ds & 0xffff;
-
     asm volatile ("jmp 6f");
     asm volatile ("7:");
     CACHE_BT_CACHE(BT_CACHE_CAPACITY);
@@ -802,6 +809,15 @@ h_switch_to(unsigned long trbase, struct v_world *w)
     V_LOG("Using switcher %p", h->hcpu.switcher);
 
     h->hcpu.switcher(trbase, w);
+
+    h->gcpu.ds = h->gcpu.ds & 0xffff;
+    if ((h->gcpu.fs & 0xffff0000) != 0 || (h->gcpu.es & 0xffff0000) != 0
+        || (h->gcpu.gs & 0xffff0000) != 0) {
+        V_EVENT("Monitor fault");
+    }
+    h->gcpu.es = h->gcpu.es & 0xffff;
+    h->gcpu.fs = h->gcpu.fs & 0xffff;
+    h->gcpu.gs = h->gcpu.gs & 0xffff;
 
     h_perf_tsc_end(H_PERF_TSC_GUEST, 0);
     h_perf_tsc_begin(0);

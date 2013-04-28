@@ -977,8 +977,7 @@ _v_bt_cache(struct v_world *world, struct v_poi *poi, int depth,
             _v_bt_cache(world, todo_poi[i], depth + 1, cache, cache_count);
         }
         if (todo_poi[i]->type & V_INST_PB) {
-            struct v_poi_pb_cache *payload =
-                 &(todo_poi[i]->pb_cache);
+            struct v_poi_pb_cache *payload = &(todo_poi[i]->pb_cache);
             if (todo_poi[i]->invalidate_cached_plan_count > 0) {
                 for (r = 0; r < todo_poi[i]->invalidate_cached_plan_count; r++) {
                     if (todo_poi[i]->invalidate_cached_plan[r] == cache) {
@@ -1016,8 +1015,7 @@ _v_bt_cache(struct v_world *world, struct v_poi *poi, int depth,
                     continue;
                 V_VERBOSE("Found poi %lx for %lx", possible_poi->addr,
                     todo_poi[i]->addr);
-                _v_bt_cache(world, possible_poi, depth + 1, cache,
-                    cache_count);
+                _v_bt_cache(world, possible_poi, depth + 1, cache, cache_count);
             }
         }
     }
@@ -1065,8 +1063,7 @@ v_bt_cache(struct v_world *world)
             save_poi[i] = world->bp_to_poi[i];
         }
         if (world->poi->type & V_INST_PB) {
-            struct v_poi_pb_cache *payload =
-                 &(world->poi->pb_cache);
+            struct v_poi_pb_cache *payload = &(world->poi->pb_cache);
 #ifdef __DEBUG_BT_CACHE
             lastcache = cache;
             if (lastcache == cache)
@@ -1116,8 +1113,7 @@ v_bt_cache(struct v_world *world)
                 _v_bt_cache(world, save_poi[i], 0, cache, &cache_count);
             }
             if (save_poi[i]->type & V_INST_PB) {
-                struct v_poi_pb_cache *payload =
-                     &(save_poi[i]->pb_cache);
+                struct v_poi_pb_cache *payload = &(save_poi[i]->pb_cache);
 #ifdef __DEBUG_BT_CACHE
                 if (lastcache == cache)
                     V_ERR("pb %x", save_poi[i]->addr);
@@ -1167,8 +1163,7 @@ v_bt_cache(struct v_world *world)
 #endif
                     V_VERBOSE("Found poi %lx for %lx", possible_poi->addr,
                         save_poi[i]->addr);
-                    _v_bt_cache(world, possible_poi, 0, cache,
-                        &cache_count);
+                    _v_bt_cache(world, possible_poi, 0, cache, &cache_count);
                 }
             }
         }

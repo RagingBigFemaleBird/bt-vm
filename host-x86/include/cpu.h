@@ -92,6 +92,9 @@ struct h_cpu {
     unsigned int cr3;
     unsigned int cr4;
 
+    unsigned int _barrier1;
+    unsigned int _barrier2;
+
     unsigned int gs;
     unsigned int fs;
     unsigned int es;
@@ -147,6 +150,7 @@ int h_cpu_init(void);
 
 struct v_world;
 /*world switch function */
+void h_switcher(unsigned long, struct v_world *);
 int h_switch_to(unsigned long, struct v_world *);
 void h_cpu_save(struct v_world *);
 void h_delete_trbase(struct v_world *);
@@ -155,5 +159,5 @@ void h_inject_int(struct v_world *, unsigned int);
 
 void h_gpfault(struct v_world *);
 void h_do_fail_inst(struct v_world *, unsigned long);
-
+void monitor_fault_entry_check(void);
 #endif
