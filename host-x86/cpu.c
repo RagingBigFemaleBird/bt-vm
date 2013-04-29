@@ -224,7 +224,6 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
             hcache[i].addr = plan[i].addr;
             hcache[i].dr7 = world->hregs.gcpu.dr7 & (0xffffff00);
             if (!(plan[i].poi->type & V_INST_CB)) {
-                /* todo: implement monitor page fault handler and enable better caching */
                 unsigned int *bp = &hcache[i].dr0;
                 hcache[i].dr7 |= (0x700 | (3 << (j * 2)));
                 *(bp + j) = plan[i].poi->addr;
@@ -243,11 +242,8 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
                     pb_total++;
                   found2:
                     asm volatile ("nop");
-/*
                 }
                 if (plan[i].poi->addr == plan[i].addr) {
-*/
-                } else {
                     hcache[i].addr = 0x0;
                 }
             } else {

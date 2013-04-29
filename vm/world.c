@@ -82,6 +82,7 @@ v_create_world(unsigned long pages)
         pg[i].io_page_info = NULL;
     }
     world->page_list = pg;
+    world->pages = pages;
     world->pa_top = pages * H_PAGE_SIZE;
     V_LOG("max pa = %lx, ", world->pa_top);
     h_world_init(world);
@@ -101,7 +102,20 @@ v_create_world(unsigned long pages)
 void
 v_destroy_world(struct v_world *world)
 {
+    int i;
+    struct v_chunk chunk;
+    chunk.order = 1;
+    chunk.phys = h_v2p((h_addr_t) (world));
+    for (i = 0; i < world->pages; i++) {
+        struct v_poi *remove = world->page_list[i].poi_list;
+        while (remove != NULL) {
+            struct v_poi *dealloc = remove;
+            remove = remove->next_poi;
+            h_raw_dealloc(dealloc);
+        }
+    }
     h_raw_dealloc(world->page_list);
+    h_raw_depalloc(&chunk);
 }
 
 /**

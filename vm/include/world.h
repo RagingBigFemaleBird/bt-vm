@@ -40,6 +40,7 @@ struct v_world {
     struct g_map cm;
 
     struct v_page *page_list;
+    unsigned int pages;
     int (*npage) (unsigned long, struct v_world *);
     unsigned long pa_top;
 
