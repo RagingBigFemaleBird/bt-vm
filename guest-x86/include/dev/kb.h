@@ -37,5 +37,7 @@ struct g_dev_kb {
 void g_inject_key(struct v_world *, unsigned int);
 void g_kb_init(struct v_world *);
 int g_kb_handle_io(struct v_world *, unsigned int, unsigned int, void *);
+int g_kb_has_key(struct v_world *);
+int g_kb_get_key(struct v_world *);
 
 #endif

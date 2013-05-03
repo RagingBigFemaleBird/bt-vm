@@ -217,3 +217,25 @@ g_kb_handle_io(struct v_world *world, unsigned int dir, unsigned int address,
     }
     return 0;
 }
+
+int
+g_kb_has_key(struct v_world *world)
+{
+    struct g_dev_kb *kb = &world->gregs.dev.kb;
+    if (kb->head == kb->tail) {
+        return 0;
+    }
+    return 1;
+}
+
+int
+g_kb_get_key(struct v_world *world)
+{
+    struct g_dev_kb *kb = &world->gregs.dev.kb;
+    if (kb->head == kb->tail) {
+        return 0;
+    }
+    kb->head = kb->tail;        /* clear entire key buffer for now */
+    /* anything will return ENTER key for now */
+    return 0x1c0d;
+}

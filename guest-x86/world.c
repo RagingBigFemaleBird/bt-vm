@@ -18,6 +18,7 @@
 #include "guest/include/bt.h"
 #include "guest/include/seed.h"
 #include "guest/include/dev/fb.h"
+#include "guest/include/dev/kb.h"
 #include "guest/include/dev/fdc.h"
 #include "guest/include/dev/dma.h"
 #include "vm/include/world.h"
@@ -66,9 +67,12 @@ g_bios_init(struct v_world *world)
         virt = v_page_make_present(mpage);
         *(unsigned short *) (virt + 0x78) = 0xefc7;     //disk param
         *(unsigned short *) (virt + 0x78) = 0xf000;     //disk param
-        *(unsigned char *) (virt + 0x44a) = 80;
-        *(unsigned char *) (virt + 0x484) = 25;
+        *(unsigned char *) (virt + 0x44a) = 80; //colums
+        *(unsigned char *) (virt + 0x484) = 25; //rows
         *(unsigned char *) (virt + 0x485) = 0x10;
+        *(unsigned short *) (virt + 0x46c) = 0x0;       //timer ticks
+        *(unsigned short *) (virt + 0x413) = 640;       //base memory size
+        *(unsigned short *) (virt + 0x462) = 0; //fb page
     }
     mpage = h_p2mp(world, 0xfe000);
     if (mpage == NULL) {
@@ -76,6 +80,40 @@ g_bios_init(struct v_world *world)
     } else {
         virt = v_page_make_present(mpage);
         h_memcpy(virt + 0xfc7, disk_param, 12); //disk param
+    }
+}
+
+void
+g_bios_tick(struct v_world *world)
+{
+    struct v_page *mpage;
+    void *virt;
+    mpage = h_p2mp(world, 0);
+    if (mpage == NULL) {
+        V_ERR("BIOS area get failed");
+    } else {
+        virt = v_page_make_present(mpage);
+        *(unsigned short *) (virt + 0x46c) = *(unsigned short *) (virt + 0x46c) + 1;    //timer ticks
+        V_VERBOSE("new bios timer tick %x", *(unsigned short *) (virt + 0x46c));
+    }
+}
+
+void
+g_debug_stack_dump(struct v_world *world, unsigned int addr)
+{
+    struct v_page *mpage;
+    void *virt;
+    mpage = h_p2mp(world, addr);
+    if (mpage == NULL) {
+        V_ERR("stack dump get mpage failed");
+    } else {
+        int i = 10;
+        virt = v_page_make_present(mpage);
+        addr = addr & 0xfff;
+        while (addr <= 0xffc && i-- > 0) {
+            V_ERR("Stack %x is %x", addr, *(unsigned int *) (virt + addr));
+            addr += 4;
+        }
     }
 }
 
@@ -344,13 +382,16 @@ g_do_int(struct v_world *world, unsigned int param)
     struct v_page *mpage;
     void *virt;
     if (world->gregs.mode == G_MODE_REAL) {
+        g_bios_tick(world);
         switch (param) {
         case 0x11:
             V_EVENT("get equipment list");
             world->hregs.gcpu.eax = 0x123;      // floppy disk installed 1, math, vga color, dma support
             break;
         case 0x10:
-            if ((world->hregs.gcpu.eax & 0xff00) == 0x0e00) {
+            if ((world->hregs.gcpu.eax & 0xff00) == 0x0000) {
+                V_LOG("set video mode %x", world->hregs.gcpu.eax & 0xff);
+            } else if ((world->hregs.gcpu.eax & 0xff00) == 0x0e00) {
                 g_fb_write(world, world->hregs.gcpu.eax & 0xff,
                     world->hregs.gcpu.eax & 0xff);
                 V_LOG("%c", world->hregs.gcpu.eax & 0xff);
@@ -359,6 +400,12 @@ g_do_int(struct v_world *world, unsigned int param)
                 world->hregs.gcpu.ecx = 0x0607;
                 world->hregs.gcpu.edx =
                     (g_fb_gety(world) << 8) + g_fb_getx(world);
+            } else if ((world->hregs.gcpu.eax & 0xff00) == 0x0200 && (world->hregs.gcpu.ebx & 0xff00) == 0) {   /*page 0 only */
+                int x = world->hregs.gcpu.edx & 0xff;
+                int y = (world->hregs.gcpu.edx >> 8) & 0xff;
+                V_LOG("set cursur %x, %x", x, y);
+                g_fb_setx(world, x);
+                g_fb_sety(world, y);
             } else if ((world->hregs.gcpu.eax & 0xff00) == 0x1200) {
                 switch (world->hregs.gcpu.ebx & 0xff) {
                 case 0x10:
@@ -379,7 +426,9 @@ g_do_int(struct v_world *world, unsigned int param)
                 V_EVENT("return current video mode");
                 world->hregs.gcpu.eax = 0x5003; // 80 columns, mode 03(vga color)
                 world->hregs.gcpu.ebx = 0;      //page 0
-
+            } else if ((world->hregs.gcpu.eax & 0xff00) == 0x4f00) {
+                V_EVENT("vesa get support");
+                world->hregs.gcpu.eax = 1;      //return not supported
             } else if ((world->hregs.gcpu.eax & 0xff00) == 0x1300) {
                 int update = world->hregs.gcpu.eax & 1;
                 int attr = world->hregs.gcpu.eax & 2;
@@ -421,21 +470,45 @@ g_do_int(struct v_world *world, unsigned int param)
                     g_fb_sety(world, savey);
                 }
 
-            } else
+            } else {
+                world->status = VM_PAUSED;
                 V_ERR("Unhandled guest interrupt: %x, EAX %x",
                     param, world->hregs.gcpu.eax);
+            }
 
             break;
         case 0x16:
             if ((world->hregs.gcpu.eax & 0xff00) == 0) {
-                world->hregs.gcpu.eax = 0x1c0d; /* auto return ENTER on key */
+                world->hregs.gcpu.eax = g_kb_get_key(world);
             } else if ((world->hregs.gcpu.eax & 0xff00) == 0x100) {
-                world->hregs.gcpu.eflags &= (~H_EFLAGS_ZF);     /* auto return HAS KEY */
+                if (g_kb_has_key(world)) {
+                    world->hregs.gcpu.eflags &= (~H_EFLAGS_ZF);
+                } else {
+                    world->hregs.gcpu.eflags |= H_EFLAGS_ZF;
+                }
             } else if ((world->hregs.gcpu.eax & 0xff00) == 0x300) {
-                V_EVENT("set typematic rate");  /* auto return HAS KEY */
-            } else
+                V_EVENT("set typematic rate");  /* ignore */
+            } else if ((world->hregs.gcpu.eax & 0xff00) == 0x1000) {
+                world->hregs.gcpu.eax = g_kb_get_key(world);
+            } else if ((world->hregs.gcpu.eax & 0xff00) == 0x200) {
+                /* get shift state, return no shift keys */
+                world->hregs.gcpu.eax &= 0xffffff00;
+            } else if ((world->hregs.gcpu.eax & 0xff00) == 0x1100) {
+                if (g_kb_has_key(world)) {
+                    world->hregs.gcpu.eflags &= (~H_EFLAGS_ZF);
+                    V_VERBOSE("key available");
+                } else {
+                    world->hregs.gcpu.eflags |= H_EFLAGS_ZF;
+                    V_VERBOSE("no key available");
+                }
+                g_debug_stack_dump(world,
+                    (world->hregs.gcpu.ss << 4) +
+                    (world->hregs.gcpu.esp & 0xffff));
+            } else {
+                world->status = VM_PAUSED;
                 V_ERR("Unhandled guest interrupt: %x, EAX %x",
                     param, world->hregs.gcpu.eax);
+            }
             break;
         case 0x13:
             switch ((world->hregs.gcpu.eax & 0xff00) >> 8) {
@@ -445,6 +518,14 @@ g_do_int(struct v_world *world, unsigned int param)
                     world->hregs.gcpu.eflags &= (~H_EFLAGS_CF);
                 } else
                     world->hregs.gcpu.eflags |= H_EFLAGS_CF;
+                break;
+            case 8:            /*disk para */
+                V_EVENT("request disk para");
+                world->hregs.gcpu.eflags |= H_EFLAGS_CF;        /* return not supported */
+                break;
+            case 0x41:         /*EDD support query */
+                V_EVENT("request EDD");
+                world->hregs.gcpu.eflags |= H_EFLAGS_CF;        /* return not supported */
                 break;
             case 0x15:         /*disk type */
                 world->hregs.gcpu.eflags &= (~H_EFLAGS_CF);
@@ -456,7 +537,7 @@ g_do_int(struct v_world *world, unsigned int param)
                 }
                 break;
             case 2:
-                if ((world->hregs.gcpu.ecx & 0xff) > 18) {      // linux way of probing disk geometry...
+                if ((world->hregs.gcpu.ecx & 0xff) > 18 * G_DEV_FLOPPY_DENSITY) {       // linux way of probing disk geometry...
                     world->hregs.gcpu.eflags |= H_EFLAGS_CF;
                     break;
                 }
@@ -466,9 +547,10 @@ g_do_int(struct v_world *world, unsigned int param)
                 drive = (world->hregs.gcpu.edx & 0xff);
                 block =
                     ((world->hregs.gcpu.ecx & 0xff00) >> 8) *
-                    36 +
+                    36 * G_DEV_FLOPPY_DENSITY +
                     ((world->hregs.gcpu.edx & 0xff00) >> 8) *
-                    18 + (world->hregs.gcpu.ecx & 0xff) - 1;
+                    18 * G_DEV_FLOPPY_DENSITY + (world->hregs.gcpu.ecx & 0xff) -
+                    1;
                 world->hregs.gcpu.eflags &= (~H_EFLAGS_CF);
                 while (to_read > 0) {
                     V_LOG(" READ block %x to %x:\n", block, addr);
@@ -489,6 +571,7 @@ g_do_int(struct v_world *world, unsigned int param)
                 }
                 break;
             default:
+                world->status = VM_PAUSED;
                 V_ERR("Unhandled guest interrupt: %x, EAX %x",
                     param, world->hregs.gcpu.eax);
             }
@@ -549,8 +632,10 @@ g_do_int(struct v_world *world, unsigned int param)
                 break;
             case 0x88:
                 world->hregs.gcpu.eflags &= ~(H_EFLAGS_CF);     /* return 16MB */
-                world->hregs.gcpu.eax = 16384 - 1024;
+                world->hregs.gcpu.eax = G_CONFIG_MEM_PAGES / 4 - 1024;
                 V_ALERT("INT: Get memory map, 80");
+                break;
+            case 0xe9:
                 break;
             case 0xe8:
                 if ((world->hregs.gcpu.eax & 0xffff) == 0xe820
@@ -565,7 +650,7 @@ g_do_int(struct v_world *world, unsigned int param)
                     world->hregs.gcpu.eflags &= (~H_EFLAGS_CF);
                     err |= h_write_guest(world, addr, 0);
                     err |= h_write_guest(world, addr + 4, 0);
-                    err |= h_write_guest(world, addr + 8, 0x1000000);   /* return 16MB */
+                    err |= h_write_guest(world, addr + 8, G_CONFIG_MEM_PAGES << 12);    /* return 16MB */
                     err |= h_write_guest(world, addr + 12, 0);
                     err |= h_write_guest(world, addr + 16, 0);
                     if (err) {
@@ -582,6 +667,7 @@ g_do_int(struct v_world *world, unsigned int param)
                         param, world->hregs.gcpu.eax, world->hregs.gcpu.edx);
                 break;
             default:
+                world->status = VM_PAUSED;
                 V_ERR("Unhandled guest interrupt: %x, EAX %x",
                     param, world->hregs.gcpu.eax);
             }
@@ -592,9 +678,10 @@ g_do_int(struct v_world *world, unsigned int param)
             break;
         case 0x12:
             V_EVENT("get memory size");
-            world->hregs.gcpu.eax = 8192;       /*return 8MB */
+            world->hregs.gcpu.eax = G_CONFIG_MEM_PAGES / 4;     /*return 16MB */
             break;
         default:
+            world->status = VM_PAUSED;
             V_ERR("Unhandled guest interrupt: %x, EAX %x", param,
                 world->hregs.gcpu.eax);
         }

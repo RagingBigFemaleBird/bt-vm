@@ -142,12 +142,12 @@ v_add_ipoi(struct v_world *world, unsigned int addr, unsigned int key,
     g_addr_t ip = g_get_ip(world);
     g_addr_t phys = g_v2p(world, ip, 1);
     struct v_page *mpage = h_p2mp(world, phys);
-    struct v_ipoi *i = mpage->ipoi_list;
+    struct v_ipoi *i;
     if (mpage == NULL) {
-        world->status = VM_PAUSED;
         V_ERR("Error: guest page fault @ add_ipoi\n");
         return;
     }
+    i = mpage->ipoi_list;
     while (i != NULL) {
         if (i->addr == addr && i->invalid) {
             V_VERBOSE("reuse %lx", i->addr);
@@ -806,7 +806,7 @@ v_do_bp(struct v_world *world, unsigned long addr, unsigned int is_step)
                     }
                 }
             }
-            V_VERBOSE("Update cache for %x is %x", world->poi->addr, ip);
+            V_VERBOSE("Update cache for %lx is %x", world->poi->addr, ip);
 #endif
             world->poi = NULL;
             v_perf_inc(V_PERF_BT_P, 1);
@@ -863,7 +863,8 @@ v_bt(struct v_world *world)
     h_perf_tsc_end(H_PERF_TSC_MAPPING, 1);
     if (phys >= world->pa_top) {
         world->status = VM_PAUSED;
-        V_ERR("Error: guest page fault @ v_bt, crazy phys addr\n");
+        V_ERR("Error: guest page fault @ v_bt, crazy phys addr %x, %x\n", ip,
+            phys);
         return;
     }
     mpage = h_p2mp(world, phys);

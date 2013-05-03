@@ -18,6 +18,8 @@
 #ifndef G_DEV_FDC_H
 #define G_DEV_FDC_H
 
+#define G_DEV_FLOPPY_DENSITY 2
+
 #define G_FDC_DOR_DMA_ENABLE	0x8
 #define G_FDC_DOR_MOTOR1	0x20
 #define G_FDC_DOR_MOTOR0	0x10
@@ -52,10 +54,10 @@
 
 #define G_FDC_DMA_CHANNEL       0x2
 
-#define G_FDC_CHS_TO_BLOCK(x, y, z) ((x) * 0x12 * 2 + (y) * 0x12 + (z) - 1)
-#define G_FDC_BLOCK_TO_C(x) ((x) / (0x12 * 2))
-#define G_FDC_BLOCK_TO_H(x) (((x) / (0x12)) % 2)
-#define G_FDC_BLOCK_TO_S(x) ((x) % (0x12) + 1)
+#define G_FDC_CHS_TO_BLOCK(x, y, z) ((x) * 0x12 * G_DEV_FLOPPY_DENSITY * 2 + (y) * 0x12 * G_DEV_FLOPPY_DENSITY + (z) - 1)
+#define G_FDC_BLOCK_TO_C(x) ((x) / (0x12 * G_DEV_FLOPPY_DENSITY * 2))
+#define G_FDC_BLOCK_TO_H(x) (((x) / (0x12 * G_DEV_FLOPPY_DENSITY)) % 2)
+#define G_FDC_BLOCK_TO_S(x) ((x) % (0x12 * G_DEV_FLOPPY_DENSITY) + 1)
 
 struct v_world;
 

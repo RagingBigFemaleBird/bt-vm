@@ -149,7 +149,7 @@ procfile_write(struct file *file, const char *buffer, unsigned long count,
                     5000000
 #endif
 #ifdef CONFIG_X86
-                    512 * 2880
+                    512 * 2880 * 2      /*2.88M max */
 #endif
                     , 0)) == NULL)
             return -EFAULT;
@@ -460,7 +460,7 @@ init_module(void)
 
     w_list = v_create_world(
 #ifdef CONFIG_X86
-        0x10000                 /* pages */
+        G_CONFIG_MEM_PAGES      /* pages */
 #endif
 #ifdef CONFIG_ARM
         0x4000                  /* pages */

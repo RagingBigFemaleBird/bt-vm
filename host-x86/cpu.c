@@ -1821,7 +1821,7 @@ h_gpfault(struct v_world *world)
     unsigned char *inst;
     unsigned int parac;
     unsigned char bound[16];
-    unsigned int mod66 = 0;
+    unsigned int mod66 = 0, csoverride = 0;
 #ifdef DEBUG_CODECONTROL
     unsigned int this_is_cli = 0;
 #endif
@@ -1845,6 +1845,11 @@ h_gpfault(struct v_world *world)
         virt = h_allocv(map & H_PFN_MASK);
         virt = virt + (g_ip & H_POFF_MASK);
         inst = virt;
+    }
+    if ((*inst) == 0x2e) {
+        csoverride = 1;
+        inst++;
+        V_VERBOSE("CS:");
     }
     if ((*inst) == 0x66) {
         mod66 = 1;
@@ -2122,6 +2127,11 @@ h_gpfault(struct v_world *world)
         h_perf_inc(H_PERF_PI_LOADSEG, 1);
         if ((unsigned int) (*(inst + 1)) == 0x01) {
             V_EVENT("LTables:");
+            V_LOG("inst is %x %x %x %x %x %x %x %x\n",
+                (unsigned int) (*(inst + 0)), (unsigned int) (*(inst + 1)),
+                (unsigned int) (*(inst + 2)), (unsigned int) (*(inst + 3)),
+                (unsigned int) (*(inst + 4)), (unsigned int) (*(inst + 5)),
+                (unsigned int) (*(inst + 6)), (unsigned int) (*(inst + 7)));
             if ((unsigned int) (*(inst + 2)) >= 0x38
                 && (unsigned int) (*(inst + 2)) <= 0x3f) {
                 V_LOG("INVLPG [reg]");
@@ -2144,7 +2154,9 @@ h_gpfault(struct v_world *world)
                     addr =
                         (unsigned
                         int) (*(unsigned short *) (inst +
-                            3)) + (world->hregs.gcpu.v86ds << 4);
+                            3)) +
+                        (csoverride ? (world->hregs.gcpu.
+                            cs << 4) : (world->hregs.gcpu.v86ds << 4));
                 else {
                     addr =
                         g_sel2base(world->gregs.ds,
@@ -2176,6 +2188,10 @@ h_gpfault(struct v_world *world)
                         + (addr & H_POFF_MASK)), sizeof(struct g_desc_table));
                 V_LOG("gdt %x limit %x\n",
                     world->gregs.gdt.base, world->gregs.gdt.limit);
+                if (mod66)
+                    world->hregs.gcpu.eip += 1;
+                if (csoverride)
+                    world->hregs.gcpu.eip += 1;
                 world->hregs.gcpu.eip += 5;
                 v_bt_reset(world);
                 break;
@@ -2295,6 +2311,8 @@ h_gpfault(struct v_world *world)
                         + (addr & H_POFF_MASK)), sizeof(struct g_desc_table));
                 V_LOG("idt %x limit %x\n",
                     world->gregs.idt.base, world->gregs.idt.limit);
+                if (mod66)
+                    world->hregs.gcpu.eip += 1;
                 world->hregs.gcpu.eip += 5;
                 v_bt_reset(world);
                 break;
@@ -2340,7 +2358,8 @@ h_gpfault(struct v_world *world)
             int reg = (unsigned int) (*(inst + 2)) & 0xf;
             int cr = (unsigned int) (*(inst + 2)) & 0xf0;
             unsigned int *target = &world->hregs.gcpu.eax;
-            V_LOG("MOV from CR into reg %x", reg);
+            V_LOG("MOV from CR into reg %x, cr0 = %x, cr3 = %x", reg,
+                world->gregs.cr0, world->gregs.cr3);
             if (0 != world->gregs.ring) {
                 world->gregs.has_errorc = 1;
                 world->gregs.errorc = 0;
@@ -2380,7 +2399,8 @@ h_gpfault(struct v_world *world)
                 target = target - reg;
                 newmode = *target;
                 if ((newmode & 0x80000001) != (world->gregs.cr0 & 0x80000001)) {
-                    V_ALERT("mode change occured");
+                    V_ALERT("mode change occured, %x to %x", world->gregs.mode,
+                        newmode);
                     if ((newmode & 0x80000000)
                         && (newmode & 0x1)) {
                         v_bt_reset(world);
@@ -2391,6 +2411,7 @@ h_gpfault(struct v_world *world)
                         if (world->gregs.mode == G_MODE_REAL) {
                             //we just entered PE from REAL, fake selectors
                             world->gregs.zombie_cs = world->hregs.gcpu.cs;
+                            world->gregs.zombie_ss = world->hregs.gcpu.ss;
                             world->gregs.zombie_jumped = 0;
                             h_fake_pe(world);
                             world->hregs.gcpu.cs = 0x7e3;
@@ -2403,9 +2424,14 @@ h_gpfault(struct v_world *world)
                     }
                     if ((!(newmode & 0x80000000))
                         && (!(newmode & 0x1))) {
-                        V_LOG("return to real unimplemented ");
-                        world->status = VM_PAUSED;
+                        V_LOG("return to real mode.");
                         world->gregs.mode = G_MODE_REAL;
+                        world->hregs.gcpu.cs = world->gregs.zombie_cs;
+                        world->hregs.gcpu.ss = world->gregs.zombie_ss;
+                        world->hregs.gcpu.eflags |= H_EFLAGS_VM;
+                        world->hregs.gcpu.trsave.esp0 =
+                            (unsigned int) (&world->hregs.gcpu.cpuid0);
+                        v_bt_reset(world);
                     }
                     if ((newmode & 0x80000000)
                         && (!(newmode & 0x1))) {
@@ -2507,6 +2533,31 @@ h_gpfault(struct v_world *world)
                     break;
                 }
             }
+        } else if ((unsigned int) (*(inst + 1)) == 0x32) {
+            union {
+                struct {
+                    unsigned long low;
+                    unsigned long high;
+                } part;
+                unsigned long long full;
+            } ret;
+            asm volatile ("rdmsr":"=a" (ret.part.low),
+                "=d"(ret.part.high):"c"(world->hregs.gcpu.ecx));
+            V_LOG("rdmsr %x is %lx %lx", world->hregs.gcpu.ecx, ret.part.low,
+                ret.part.high);
+            world->hregs.gcpu.eax = ret.part.low;
+            world->hregs.gcpu.edx = ret.part.high;
+            world->hregs.gcpu.eip += 2;
+            break;
+        } else if ((unsigned int) (*(inst + 1)) == 0x30) {
+            V_LOG("wrmsr %x is %x %x", world->hregs.gcpu.ecx,
+                world->hregs.gcpu.eax, world->hregs.gcpu.edx);
+            world->hregs.gcpu.eip += 2;
+            break;
+        } else if ((unsigned int) (*(inst + 1)) == 0x09) {
+            V_LOG("wbinvd");
+            world->hregs.gcpu.eip += 2;
+            break;
         }
         goto undef_inst;
         break;
@@ -2694,8 +2745,10 @@ h_gpfault(struct v_world *world)
         h_perf_inc(H_PERF_PI_FLAGS, 1);
         V_EVENT("PUSHF:");
         if (world->gregs.mode == G_MODE_REAL) {
-            unsigned int sp = g_get_sp(world);
+            unsigned int sp;
             unsigned int eflags = world->hregs.gcpu.eflags;
+            world->hregs.gcpu.esp = world->hregs.gcpu.esp & 0xffff;
+            sp = g_get_sp(world);
             if (v_int_enabled(world))
                 eflags |= H_EFLAGS_IF;
             else
@@ -2714,6 +2767,7 @@ h_gpfault(struct v_world *world)
 
         } else {
             unsigned int eflags = world->hregs.gcpu.eflags;
+            int is16 = g_get_current_ex_mode(world) == G_EX_MODE_16;
             if (v_int_enabled(world))
                 eflags |= H_EFLAGS_IF;
             else
@@ -2722,13 +2776,13 @@ h_gpfault(struct v_world *world)
             eflags |= (world->gregs.iopl << 12);
             if (world->gregs.nt)
                 eflags |= H_EFLAGS_NT;
-            if (g_get_current_ex_mode(world) == G_EX_MODE_16) {
+            if ((is16 && !mod66) || (!is16 && mod66)) {
                 unsigned int sp = g_get_sp(world);
                 eflags = eflags << 16;
                 h_write_guest(world, sp - 4, eflags);
                 world->hregs.gcpu.esp -= 2;
                 world->hregs.gcpu.eip++;
-            } else if (g_get_current_ex_mode(world) == G_EX_MODE_32) {
+            } else {
                 unsigned int sp = g_get_sp(world);
                 h_write_guest(world, sp - 4, eflags);
                 world->hregs.gcpu.esp -= 4;
@@ -2741,24 +2795,27 @@ h_gpfault(struct v_world *world)
         h_perf_inc(H_PERF_PI_FLAGS, 1);
         V_EVENT("POPF:");
         if (world->gregs.mode == G_MODE_REAL) {
-            unsigned int sp = g_get_sp(world);
+            unsigned int sp;
             unsigned int eflags;
+            world->hregs.gcpu.esp = world->hregs.gcpu.esp & 0xffff;
+            sp = g_get_sp(world);
             if (!mod66) {
                 h_read_guest(world, sp - 2, &eflags);
                 eflags = (eflags >> 16);
+                world->hregs.gcpu.eflags &= 0xfffff000;
             } else {
                 h_read_guest(world, sp, &eflags);
                 world->hregs.gcpu.esp += 2;
                 world->hregs.gcpu.eip++;
+                world->hregs.gcpu.eflags &= 0xffc3f000;
             }
             V_LOG("New eflags: %x", eflags);
             if (eflags & 0x200)
                 v_enable_int(world);
             else
                 v_disable_int(world);
-            world->hregs.gcpu.eflags &= 0xfffff000;
             world->hregs.gcpu.eflags |=
-                ((eflags & 0xcd7) | (H_EFLAGS_IF | H_EFLAGS_RESERVED));
+                ((eflags & 0x3e0cd7) | (H_EFLAGS_IF | H_EFLAGS_RESERVED));
             world->gregs.eflags_real = eflags & 0xc000;
             world->hregs.gcpu.esp += 2;
             world->hregs.gcpu.eip++;
@@ -2766,13 +2823,14 @@ h_gpfault(struct v_world *world)
 
         } else {
             unsigned int eflags;
-            if (g_get_current_ex_mode(world) == G_EX_MODE_16) {
+            int is16 = g_get_current_ex_mode(world) == G_EX_MODE_16;
+            if ((is16 && !mod66) || (!is16 && mod66)) {
                 unsigned int sp = g_get_sp(world);
                 h_read_guest(world, sp, &eflags);
                 eflags = eflags & 0xffff;
                 world->hregs.gcpu.esp += 2;
                 world->hregs.gcpu.eip++;
-            } else if (g_get_current_ex_mode(world) == G_EX_MODE_32) {
+            } else {
                 unsigned int sp = g_get_sp(world);
                 h_read_guest(world, sp, &eflags);
                 world->hregs.gcpu.esp += 4;
