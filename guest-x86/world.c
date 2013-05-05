@@ -501,9 +501,11 @@ g_do_int(struct v_world *world, unsigned int param)
                     world->hregs.gcpu.eflags |= H_EFLAGS_ZF;
                     V_VERBOSE("no key available");
                 }
+/*
                 g_debug_stack_dump(world,
                     (world->hregs.gcpu.ss << 4) +
                     (world->hregs.gcpu.esp & 0xffff));
+*/
             } else {
                 world->status = VM_PAUSED;
                 V_ERR("Unhandled guest interrupt: %x, EAX %x",

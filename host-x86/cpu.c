@@ -2196,6 +2196,55 @@ h_gpfault(struct v_world *world)
                 v_bt_reset(world);
                 break;
             }
+            if ((unsigned int) (*(inst + 2)) == 0xd1) {
+                V_LOG("xsetv %x", world->hregs.gcpu.ecx);
+                world->hregs.gcpu.eip += 3;
+                break;
+            }
+            if ((unsigned int) (*(inst + 2)) == 0x55) {
+                /* lgdt 32 bit [ebp][1byteoff]/16 bit [di][1byteoff] */
+                struct v_page *mpage;
+                void *virt;
+                g_addr_t addr;
+                if (world->gregs.mode == G_MODE_REAL)
+                    addr =
+                        (int) (*(char *) (inst +
+                            3)) + (world->hregs.gcpu.edi & 0xffff) +
+                        (csoverride ? (world->hregs.gcpu.
+                            cs << 4) : (world->hregs.gcpu.v86es << 4));
+                else {
+                    addr =
+                        g_sel2base(world->gregs.ss,
+                        world->gregs.sshigh) + world->hregs.gcpu.ebp +
+                        (int) (*(char *) (inst + 3));
+                }
+                if (0 != world->gregs.ring) {
+                    world->gregs.has_errorc = 1;
+                    world->gregs.errorc = 0;
+                    h_inject_int(world, 0x0d);
+                    break;
+                }
+                addr = g_v2p(world, addr, 0);
+                mpage = h_p2mp(world, addr);
+                if (mpage == NULL) {
+                    V_LOG("LGDT x86/16 Guest GP Fault\n");
+                    break;
+                }
+                virt = h_allocv(mpage->mfn << H_PAGE_SHIFT);
+                V_LOG("mem: %x /", addr);
+                h_memcpy(&world->gregs.gdt,
+                    (void *) (((unsigned int) (virt) & H_PFN_MASK)
+                        + (addr & H_POFF_MASK)), sizeof(struct g_desc_table));
+                V_LOG("gdt %x limit %x\n",
+                    world->gregs.gdt.base, world->gregs.gdt.limit);
+                if (mod66)
+                    world->hregs.gcpu.eip += 1;
+                if (csoverride)
+                    world->hregs.gcpu.eip += 1;
+                world->hregs.gcpu.eip += 4;
+                v_bt_reset(world);
+                break;
+            }
             if ((unsigned int) (*(inst + 2)) == 0x15) {
                 struct v_page *mpage;
                 void *virt;
