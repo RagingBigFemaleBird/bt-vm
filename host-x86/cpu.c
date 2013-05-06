@@ -903,10 +903,22 @@ h_switch_to(unsigned long trbase, struct v_world *w)
         h_read_guest(w, g_ip + 8, (unsigned int *) &bound[8]);
         h_read_guest(w, g_ip + 12, (unsigned int *) &bound[12]);
         inst = (unsigned char *) &bound;
-        V_ERR("invalid opcode: %x %x %x %x", (unsigned int) (*(inst + 0)),
-            (unsigned int) (*(inst + 1)), (unsigned int) (*(inst + 2)),
-            (unsigned int) (*(inst + 3)));
-        w->status = VM_PAUSED;
+        if ((unsigned int) (*(inst + 0)) == 0x0f
+            && (unsigned int) (*(inst + 1)) == 0x01
+            && (unsigned int) (*(inst + 2)) == 0xc8) {
+            /* monitor */
+            w->hregs.gcpu.eip += 3;
+        } else if ((unsigned int) (*(inst + 0)) == 0x0f
+            && (unsigned int) (*(inst + 1)) == 0x01
+            && (unsigned int) (*(inst + 2)) == 0xc9) {
+            /* mwait */
+            w->hregs.gcpu.eip += 3;
+        } else {
+            V_ERR("fault 06 by: %x %x %x %x", (unsigned int) (*(inst + 0)),
+                (unsigned int) (*(inst + 1)), (unsigned int) (*(inst + 2)),
+                (unsigned int) (*(inst + 3)));
+            w->status = VM_PAUSED;
+        }
     } else if ((h->gcpu.intr & 0xff) == 0xef) {
         time_up = 1;
         if (!(h->gcpu.eflags & H_EFLAGS_TF))
