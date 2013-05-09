@@ -38,7 +38,6 @@ char *fname;
 FILE *f;
 unsigned long offset, len;
 void *address;
-char scr[4096];
 #define lastline_x 0
 #define lastline_y 23
 int step = 0;
@@ -112,7 +111,7 @@ do_keys(void)
 
     while (1) {
         counter++;
-        for (i = start_line; i < 120; i++) {
+        for (i = start_line; i < 200; i++) {
             for (j = 0; j < 80; j++) {
                 if (i - start_line < row && j < col) {
                     unsigned char bg = ((unsigned char *)

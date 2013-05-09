@@ -158,6 +158,10 @@ g_world_init(struct v_world *w, unsigned long pages)
     g_fb_init(w, 0xb9000);
     g_fb_init(w, 0xba000);
     g_fb_init(w, 0xbb000);
+    g_fb_init(w, 0xbc000);
+    g_fb_init(w, 0xbd000);
+    g_fb_init(w, 0xbe000);
+    g_fb_init(w, 0xbf000);
     g_pic_init(w);
     g_bios_init(w);
     g_kb_init(w);
