@@ -132,7 +132,7 @@ h_set_p2m(struct v_world *world, g_addr_t pa, unsigned long pages, h_addr_t ma)
 }
 
 struct v_page *
-h_p2mp(struct v_world *world, unsigned long pa)
+h_p2mp(struct v_world *world, h_addr_t pa)
 {
     struct v_page *pg;
     if (pa > world->pa_top)
@@ -150,13 +150,54 @@ h_p2mp(struct v_world *world, unsigned long pa)
 #define H_PAGE_PCD	(1<<4)
 #define H_PAGE_PWT	(1<<3)
 
+#define h_pae_pdpte_off(va) (((va) >> 30) << 3)
+#define h_pae_pt1_off(va) ((((va) & 0x3ffff000) >> 21) << 3)
+#define h_pae_pt2_off(va) ((((va) & 0x1ff000) >> 12) << 3)
+
 h_addr_t
 h_v2p(h_addr_t virt)
 {
-    unsigned int cr3, ret;
+    unsigned int cr3;
+    h_addr_t ret;
     void *x, *l1, *l2;
     asm volatile ("movl %%cr3, %0":"=r" (cr3):);
+    virt = virt & 0xffffffff;
     x = h_allocv(cr3);
+#ifdef H_MM_USE_PAE
+    {
+        void *pdpte = h_pae_pdpte_off((unsigned int) virt) + x;
+        pdpte += (cr3 & H_POFF_MASK);
+        V_VERBOSE("h_v2p @ %llx cr3 = %x, pdpte %p: %llx", virt, cr3, pdpte,
+            *(h_addr_t *) pdpte);
+        if (!((*(h_addr_t *) pdpte) & H_PAGE_P)) {
+            h_deallocv(cr3);
+            return 0;
+        }
+        l1 = h_allocv(*(h_addr_t *) pdpte);
+        l1 = l1 + h_pae_pt1_off(virt);
+        V_VERBOSE("l1 %p: %llx", l1, *(h_addr_t *) l1);
+        if ((*(h_addr_t *) l1) & H_PAGE_PS) {
+            h_addr_t ret =
+                ((*(h_addr_t *) l1) & 0x7fffffffffe00000) + (virt & 0x1fffff);
+            if (!((*(h_addr_t *) l1) & H_PAGE_P)) {
+                h_deallocv(cr3);
+                return 0;
+            }
+            h_deallocv(cr3);
+            return ret;
+        }
+        l2 = h_allocv(*(h_addr_t *) l1 & 0x7ffffffffffff000);
+        l2 = l2 + h_pae_pt2_off(virt);
+        V_VERBOSE("l2 %p: %llx", l2, *(h_addr_t *) l2);
+        ret = ((*(h_addr_t *) l2) & 0x7ffffffffffff000) + (virt & 0xfff);
+        if (!((*(h_addr_t *) l2) & H_PAGE_P)) {
+            h_deallocv(*(h_addr_t *) l1);
+            return 0;
+        }
+        h_deallocv(*(h_addr_t *) l1);
+        return ret;
+    }
+#else
     l1 = h_pt1_off((unsigned int) virt) + x;
     if ((*(unsigned int *) l1) & H_PAGE_PS) {
         unsigned int ret =
@@ -177,15 +218,17 @@ h_v2p(h_addr_t virt)
     }
     h_deallocv(*(unsigned int *) l1);
     return ret;
+#endif
 }
 
 void
-h_clear_page(h_addr_t va)
+h_clear_page(void *va)
 {
-    va = va & H_PFN_MASK;
+    va = (void *) (((unsigned int) va) & H_PFN_MASK);
     h_memset((void *) va, 0, 4096);
 }
 
+#ifndef H_MM_USE_PAE
 static unsigned int
 h_pt1_format(h_addr_t pa, int attr)
 {
@@ -214,15 +257,102 @@ h_pt2_format(h_addr_t pa, int attr)
     return entry;
 }
 
+#else
+static unsigned long long
+h_pae_pdpte_format(h_addr_t pa, int attr)
+{
+    unsigned long long entry = (pa & 0xfffffffffffff000);
+    entry = entry | H_PAGE_P;
+    return entry;
+}
+
+static unsigned long long
+h_pae_pt1_format(h_addr_t pa, int attr)
+{
+    unsigned long long entry = (pa & 0xfffffffffffff000);
+    entry = entry | H_PAGE_US;
+    entry = entry | H_PAGE_RW;
+    entry = entry | H_PAGE_P;
+    return entry;
+}
+
+static unsigned long long
+h_pae_pt2_format(h_addr_t pa, int attr)
+{
+    unsigned long long entry = (pa & 0xfffffffffffff000);
+    unsigned long long priv = attr & V_PAGE_PRIV_MASK;
+    if (priv == V_PAGE_USR || priv == V_PAGE_SYS)
+        entry = entry | H_PAGE_US;
+    if (attr & V_PAGE_W)
+        entry = entry | H_PAGE_RW;
+    if (!(attr & V_PAGE_NOMAP))
+        entry = entry | H_PAGE_P;
+    if (attr & V_PAGE_WBD)
+        entry = entry | H_PAGE_PWT;
+    if (attr & V_PAGE_CD)
+        entry = entry | H_PAGE_PCD;
+    return entry;
+}
+#endif
+
 void
-h_set_map(unsigned long trbase, h_addr_t va, h_addr_t pa,
-    unsigned long pages, int attr)
+h_set_map(h_addr_t trbase, h_addr_t va, h_addr_t pa, h_addr_t pages, int attr)
 {
     va = va & H_PFN_MASK;
     pa = pa & H_PFN_MASK;
+    /* va is 32 always bit */
+    va = va & 0xffffffff;
     while (pages > 0) {
+#ifdef H_MM_USE_PAE
         void *tr = h_allocv(trbase);
-        unsigned int *l1 = tr + h_pt1_off(va);
+        h_addr_t *l0 = tr + (trbase & H_POFF_MASK) + h_pae_pdpte_off(va), *l1;
+        void *l1v;
+        if (!((*l0) & H_PAGE_P)) {
+            struct v_chunk *c = h_raw_palloc(0);
+            void *l1v = h_allocv(c->phys);
+            h_clear_page(l1v);
+            *l0 = h_pae_pdpte_format(c->phys, attr);
+            h_deallocv(c->phys);
+        }
+        l1v = h_allocv(*l0);
+        l1 = l1v + h_pae_pt1_off(va);
+        if (h_pae_pt1_off(va) != h_pae_pt1_off(va - H_PAGE_SIZE)
+            && pages >= (1 << 9)) {
+            (*l1) = h_pae_pt1_format(pa, attr) | H_PAGE_PS;
+            V_LOG("mapping large page %llx to %llx, l1 = %llx", va, pa, *l1);
+            h_deallocv(*l0);
+            h_deallocv(trbase);
+            pages -= (1 << 9);
+            va += H_PAGE_SIZE * (1 << 9);
+            pa += H_PAGE_SIZE * (1 << 9);
+            continue;
+        }
+        if (((*l1) & H_PAGE_P) == 0 || ((*l1) & H_PAGE_PS)) {
+            struct v_chunk *c = h_raw_palloc(0);
+            void *l2v = h_allocv(c->phys);
+            h_addr_t *l2 = l2v + h_pae_pt2_off(va);
+            h_clear_page(l2v);
+            (*l1) = h_pae_pt1_format(c->phys, attr);
+            (*l2) = h_pae_pt2_format(pa, attr);
+            V_LOG("mapping %llx to %llx, l1 = %llx, l2= %llx\n", va, pa, *l1,
+                *l2);
+            h_deallocv(c->phys);
+        } else {
+            void *l2v = h_allocv((*l1));
+            h_addr_t *l2 = l2v + h_pae_pt2_off(va);
+            (*l2) = h_pae_pt2_format(pa, attr);
+            V_LOG("mapping %llx to %llx, l1 = %llx, l2= %llx\n", va, pa, *l1,
+                *l2);
+            h_deallocv((*l1));
+        }
+        h_deallocv(*l0);
+        h_deallocv(trbase);
+        pages--;
+        va += H_PAGE_SIZE;
+        pa += H_PAGE_SIZE;
+#else
+        void *tr = h_allocv(trbase);
+        h_addr_t *l1 = tr + h_pt1_off(va);
         if (h_pt1_off(va) != h_pt1_off(va - H_PAGE_SIZE) && pages >= (1 << 10)) {
             //large page possible
             (*l1) = h_pt1_format(pa, attr) | H_PAGE_PS;
@@ -236,15 +366,15 @@ h_set_map(unsigned long trbase, h_addr_t va, h_addr_t pa,
         if (((*l1) & H_PAGE_P) == 0 || ((*l1) & H_PAGE_PS)) {
             struct v_chunk *c = h_raw_palloc(0);
             void *l2v = h_allocv(c->phys);
-            unsigned int *l2 = l2v + h_pt2_off(va);
-            h_clear_page((unsigned int) l2v);
+            h_addr_t *l2 = l2v + h_pt2_off(va);
+            h_clear_page(l2v);
             (*l1) = h_pt1_format(c->phys, attr);
             (*l2) = h_pt2_format(pa, attr);
             V_LOG("mapping %lx to %lx, l1 = %x, l2= %x\n", va, pa, *l1, *l2);
             h_deallocv(c->phys);
         } else {
             void *l2v = h_allocv((*l1));
-            unsigned int *l2 = l2v + h_pt2_off(va);
+            h_addr_t *l2 = l2v + h_pt2_off(va);
             (*l2) = h_pt2_format(pa, attr);
             V_LOG("mapping %lx to %lx, l1 = %x, l2= %x\n", va, pa, *l1, *l2);
             h_deallocv((*l1));
@@ -254,6 +384,7 @@ h_set_map(unsigned long trbase, h_addr_t va, h_addr_t pa,
         pages--;
         va += H_PAGE_SIZE;
         pa += H_PAGE_SIZE;
+#endif
     }
 }
 
@@ -263,25 +394,60 @@ h_get_map(h_addr_t trbase, h_addr_t virt)
     void *x = h_allocv(trbase);
     void *l1 = h_pt1_off((unsigned int) virt) + x;
     void *l2;
-    unsigned int ret;
-    if (!((*(unsigned int *) l1) & H_PAGE_P)) {
-        h_deallocv(trbase);
-        return 0;
-    }
-    if ((*(unsigned int *) l1) & H_PAGE_PS) {
-        unsigned int ret = *(unsigned int *) l1;
+    h_addr_t ret;
+#ifdef H_MM_USE_PAE
+    {
+        void *l0;
+        virt = virt & 0xffffffff;
+        l0 = h_pae_pdpte_off(virt) + x + (trbase & H_POFF_MASK);
+        if (!((*(h_addr_t *) l0) & H_PAGE_P)) {
+            h_deallocv(trbase);
+            return 0;
+        }
+        l1 = h_pae_pt1_off(virt) + h_allocv(*(h_addr_t *) l0);
+        if ((*(h_addr_t *) l1) & H_PAGE_PS) {
+            h_addr_t ret = *(h_addr_t *) l1;
+            h_deallocv(trbase);
+            return ret;
+        }
+        if (!((*(h_addr_t *) l1) & H_PAGE_P)) {
+            h_deallocv(*(h_addr_t *) l0);
+            h_deallocv(trbase);
+            return 0;
+        }
+        l2 = h_allocv(*(h_addr_t *) l1);
+        l2 = l2 + h_pae_pt2_off(virt);
+        ret = *(h_addr_t *) l2;
+        if (!((*(h_addr_t *) l2) & H_PAGE_P)) {
+            ret = 0;
+        }
+        h_deallocv(*(h_addr_t *) l1);
+        h_deallocv(*(h_addr_t *) l0);
         h_deallocv(trbase);
         return ret;
     }
-    l2 = h_allocv(*(unsigned int *) l1);
-    l2 = l2 + h_pt2_off((unsigned int) virt);
-    ret = *(unsigned int *) l2;
-    if (!((*(unsigned int *) l2) & H_PAGE_P)) {
-        h_deallocv(*(unsigned int *) l1);
+#else
+    if (!((*(h_addr_t *) l1) & H_PAGE_P)) {
+        h_deallocv(trbase);
         return 0;
     }
-    h_deallocv(*(unsigned int *) l1);
+    if ((*(h_addr_t *) l1) & H_PAGE_PS) {
+        h_addr_t ret = *(h_addr_t *) l1;
+        h_deallocv(trbase);
+        return ret;
+    }
+    l2 = h_allocv(*(h_addr_t *) l1);
+    l2 = l2 + h_pt2_off(virt);
+    ret = *(h_addr_t *) l2;
+    if (!((*(h_addr_t *) l2) & H_PAGE_P)) {
+        h_deallocv(*(h_addr_t *) l1);
+        h_deallocv(trbase);
+        return 0;
+    }
+    h_deallocv(*(h_addr_t *) l1);
+    h_deallocv(trbase);
     return ret;
+#endif
 }
 
 void
@@ -422,13 +588,37 @@ h_monitor_search_big_pages(struct v_world * world, unsigned int trbase,
     unsigned int ret;
     long long req = size;
     void *x, *l1;
+#ifdef H_MM_USE_PAE
+    void *l0;
+    x = h_allocv(trbase);
+    for (ret = 0xe0000000; ret < 0xf0000000; ret += 0x200000) {
+        l0 = h_pae_pdpte_off(ret) + x + (trbase & H_POFF_MASK);
+        if (!((*(h_addr_t *) l0) & H_PAGE_P)) {
+            continue;
+        }
+        l1 = h_allocv(*(h_addr_t *) l0);
+        l1 = h_pae_pt1_off((unsigned int) ret) + l1;
+        if (!((*(unsigned int *) l1) & H_PAGE_PS)) {
+            req -= 0x200000;
+            if (req <= 0) {
+                V_VERBOSE("Found %lx spacing in pt",
+                    (unsigned long) (ret + 0x200000 - size));
+                h_deallocv(trbase);
+                return ret + 0x200000 - size;
+            }
+        } else {
+            req = size;
+        }
+    }
+#else
     x = h_allocv(trbase);
     for (ret = 0xe0000000; ret < 0xf0000000; ret += 0x400000) {
         l1 = h_pt1_off((unsigned int) ret) + x;
         if (!((*(unsigned int *) l1) & H_PAGE_PS)) {
             req -= 0x400000;
             if (req <= 0) {
-                V_VERBOSE("Found %lx spacing in pt", ret + 0x400000 - size);
+                V_VERBOSE("Found %lx spacing in pt",
+                    (unsigned long) (ret + 0x400000 - size));
                 h_deallocv(trbase);
                 return ret + 0x400000 - size;
             }
@@ -436,6 +626,7 @@ h_monitor_search_big_pages(struct v_world * world, unsigned int trbase,
             req = size;
         }
     }
+#endif
     h_deallocv(trbase);
     return 0;
 }

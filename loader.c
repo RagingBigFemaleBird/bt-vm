@@ -15,6 +15,7 @@
  *  You should have received a copy of the GNU General Public License
  *   along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+#include <linux/version.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/gfp.h>
@@ -372,7 +373,13 @@ int
 btc_mmap(struct file *filp, struct vm_area_struct *vma)
 {
     vma->vm_ops = &btc_vm_ops;
-    vma->vm_flags |= VM_RESERVED;
+    vma->vm_flags |=
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,7,0)
+        (VM_DONTEXPAND | VM_DONTDUMP)
+#else
+        VM_RESERVED
+#endif
+        ;
     vma->vm_private_data = filp->private_data;
     btc_vma_open(vma);
     return 0;
@@ -402,7 +409,11 @@ struct file_operations btc_fops = {
     .open = btc_open,
     .release = btc_release,
 #ifdef CONFIG_X86
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,7,0)
+    .unlocked_ioctl = btc_ioctl,
+#else
     .ioctl = btc_ioctl,
+#endif
 #endif
 #ifdef CONFIG_ARM
     .unlocked_ioctl = btc_ioctl,

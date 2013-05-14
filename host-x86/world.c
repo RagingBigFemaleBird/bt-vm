@@ -31,6 +31,11 @@ h_monitor_fault_check_fixup(struct v_world *world)
     int monitor_offset;
     int monitor_stack_offset;
     unsigned int h_switcher_page = (unsigned int) world->hregs.hcpu.switcher;
+    unsigned int cr0;
+    asm volatile ("movl %%cr0, %0":"=r" (cr0));
+    if (cr0 & H_CR0_WP) {
+        asm volatile ("movl %0, %%cr0"::"r" (cr0 & (~H_CR0_WP)));
+    }
     monitor_offset =
         (unsigned int) monitor_fault_entry_check - (unsigned int) h_switcher;
     monitor_stack_offset =
@@ -40,6 +45,9 @@ h_monitor_fault_check_fixup(struct v_world *world)
         monitor_stack_offset;
     *(unsigned int *) (h_switcher_page + monitor_offset + 6 + 2 + 1) =
         monitor_stack_offset - 8 * 4 - 12;
+    if (cr0 & H_CR0_WP) {
+        asm volatile ("movl %0, %%cr0"::"r" (cr0));
+    }
     V_ERR("fixing monitor stack check @%x to %x",
         h_switcher_page + monitor_offset, monitor_stack_offset);
 }
@@ -63,10 +71,10 @@ h_world_init(struct v_world *world)
     h_monitor_fault_check_fixup(world);
     h_pin(h_v2p((h_addr_t) world));
 
-    h_set_map(world->htrbase, (long unsigned int) world,
+    h_set_map(world->htrbase, (h_addr_t) world,
         h_v2p((unsigned int) world), 1, V_PAGE_W | V_PAGE_VM);
     V_ERR("world data at %p, ", world);
-    h_set_map(world->htrbase, (long unsigned int) world->hregs.hcpu.switcher,
+    h_set_map(world->htrbase, (h_addr_t) world->hregs.hcpu.switcher,
         h_v2p((unsigned int) world->hregs.hcpu.switcher), 1,
         V_PAGE_W | V_PAGE_VM);
     V_ERR("neutral page at %p\n", world->hregs.hcpu.switcher);
@@ -169,12 +177,12 @@ h_world_init(struct v_world *world)
     asm volatile ("fxsave (%0)"::"r" (world->hregs.fpu + 512));
     world->hregs.fpusaved = 0;
 
-    V_ERR("tables at %x, phys %x\n", world->hregs.gcpu.gdt.base,
-        (unsigned int) h_v2p(world->hregs.gcpu.idt.base));
-    h_set_map(world->htrbase, (unsigned long) world->hregs.gcpu.idt.base,
+    V_ERR("tables at %x, phys %llx\n", world->hregs.gcpu.gdt.base,
+        (unsigned long long) h_v2p(world->hregs.gcpu.idt.base));
+    h_set_map(world->htrbase, (h_addr_t) world->hregs.gcpu.idt.base,
         h_v2p(world->hregs.gcpu.idt.base), 1, V_PAGE_W | V_PAGE_VM);
 
-    h_set_map(world->htrbase, (unsigned long) world->hregs.gcpu.gdt.base,
+    h_set_map(world->htrbase, (h_addr_t) world->hregs.gcpu.gdt.base,
         h_v2p(world->hregs.gcpu.gdt.base), 1, V_PAGE_W | V_PAGE_VM);
 }
 

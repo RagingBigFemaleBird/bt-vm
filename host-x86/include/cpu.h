@@ -38,6 +38,8 @@
 #define H_EFLAGS_RESERVED	(1 << 1)
 #define H_EFLAGS_IOPL_MASK	(3 << 12)
 
+#define H_CR0_WP        (1 << 16)
+
 #define H_CR4_PGE       (1 << 7)
 #define H_CR4_PAE       (1 << 5)
 #define H_CR4_PSE       (1 << 4)

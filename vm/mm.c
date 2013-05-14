@@ -61,7 +61,7 @@ v_page_make_present(struct v_page *mpage)
             return 0;
         }
         virt = h_allocv(v->phys);
-        h_clear_page((unsigned int) virt);
+        h_clear_page(virt);
         mpage->mfn = (v->phys >> H_PAGE_SHIFT);
         if ((mpage->attr & V_PAGE_TYPE_MASK) == 0)
             mpage->attr = V_PAGE_EXD;

@@ -69,8 +69,19 @@ h_cpu_init(void)
     asm volatile ("movl %%cr4, %0":"=r" (hostcpu.cr4):);
     V_LOG("CR4: %x\n", hostcpu.cr4);
     if (hostcpu.cr4 & H_CR4_PAE) {
-        V_ERR("Unable to run on PAE enabled machine!");
-        return 1;
+#ifdef H_MM_USE_PAE
+        V_LOG("Using PAE paging");
+#else
+        V_ERR
+            ("Unable to run under PAE mode! Recompile with a different setting!");
+#endif
+    } else {
+#ifndef H_MM_USE_PAE
+        V_LOG("Using 32 bit paging");
+#else
+        V_ERR
+            ("Unable to run under non PAE mode! Recompile with a different setting!");
+#endif
     }
     if (hostcpu.cr4 & H_CR4_PGE) {
         V_ERR("Disabling global pages...");
@@ -1307,22 +1318,25 @@ h_inv_pagetable(struct v_world *world, struct v_spt_info *spt,
                 h_raw_depalloc(&v);
             }
         }
-        h_clear_page((unsigned long) htrv);
+        h_clear_page(htrv);
         h_deallocv(spt->spt_paddr + i * H_PAGE_SIZE);
     }
     h_set_map(spt->spt_paddr, (h_addr_t) world,
         h_v2p((h_addr_t) world), 1, V_PAGE_W | V_PAGE_VM);
-    V_LOG("world data at %x, ", (unsigned int) h_v2p((h_addr_t) world));
+    V_LOG("world data at %llx, ",
+        (unsigned long long int) h_v2p((h_addr_t) world));
     h_set_map(spt->spt_paddr, (h_addr_t) world->hregs.hcpu.switcher,
         h_v2p((h_addr_t) world->hregs.hcpu.switcher), 1, V_PAGE_W | V_PAGE_VM);
-    V_LOG("neutral page at %x\n",
-        (unsigned int) h_v2p((h_addr_t) world->hregs.hcpu.switcher));
+    V_LOG("neutral page at %llx\n",
+        (unsigned long long int) h_v2p((h_addr_t) world->hregs.hcpu.switcher));
     h_set_map(spt->spt_paddr, (h_addr_t) world->hregs.gcpu.idt.base,
         h_v2p(world->hregs.gcpu.idt.base), 1, V_PAGE_W | V_PAGE_VM);
-    V_LOG("idt at %x\n", (unsigned int) h_v2p(world->hregs.gcpu.idt.base));
+    V_LOG("idt at %llx\n",
+        (unsigned long long int) h_v2p(world->hregs.gcpu.idt.base));
     h_set_map(spt->spt_paddr, (h_addr_t) world->hregs.gcpu.gdt.base,
         h_v2p(world->hregs.gcpu.gdt.base), 1, V_PAGE_W | V_PAGE_VM);
-    V_LOG("gdt at %x\n", (unsigned int) h_v2p(world->hregs.gcpu.gdt.base));
+    V_LOG("gdt at %llx\n",
+        (unsigned long long int) h_v2p(world->hregs.gcpu.gdt.base));
     for (i = 0; i < V_MM_MAX_POOL; i++) {
         spt->mem_pool_mapped[i] = 0;
     }
@@ -1376,25 +1390,27 @@ h_new_trbase(struct v_world *world)
         V_EVENT("new base: %lx from %x", world->htrbase, cr3);
         for (i = 0; i < (1 << H_TRBASE_ORDER); i++) {
             htrv = h_allocv(world->htrbase + i * H_PAGE_SIZE);
-            h_clear_page((unsigned long) htrv);
+            h_clear_page(htrv);
             h_deallocv(world->htrbase + i * H_PAGE_SIZE);
         }
-        h_set_map(world->htrbase, (long unsigned int) world,
+        h_set_map(world->htrbase, (h_addr_t) world,
             h_v2p((unsigned int) world), 1, V_PAGE_W | V_PAGE_VM);
-        V_LOG("world data at %x, ", (unsigned int) h_v2p((unsigned int) world));
-        h_set_map(world->htrbase,
-            (long unsigned int) world->hregs.hcpu.switcher,
+        V_LOG("world data at %llx, ",
+            (unsigned long long int) h_v2p((unsigned int) world));
+        h_set_map(world->htrbase, (h_addr_t) world->hregs.hcpu.switcher,
             h_v2p((unsigned int) world->hregs.hcpu.switcher), 1,
             V_PAGE_W | V_PAGE_VM);
-        V_LOG("neutral page at %x\n",
-            (unsigned int) h_v2p((unsigned int) world->hregs.hcpu.switcher));
+        V_LOG("neutral page at %llx\n",
+            (unsigned long long int) h_v2p((unsigned int) world->hregs.
+                hcpu.switcher));
         h_set_map(world->htrbase, (unsigned long) world->hregs.gcpu.idt.base,
             h_v2p(world->hregs.gcpu.idt.base), 1, V_PAGE_W | V_PAGE_VM);
-        V_LOG("idt at %x\n", (unsigned int) h_v2p(world->hregs.gcpu.idt.base));
-        h_set_map(world->htrbase,
-            (unsigned long) world->hregs.gcpu.gdt.base,
+        V_LOG("idt at %llx\n",
+            (unsigned long long int) h_v2p(world->hregs.gcpu.idt.base));
+        h_set_map(world->htrbase, (unsigned long) world->hregs.gcpu.gdt.base,
             h_v2p(world->hregs.gcpu.gdt.base), 1, V_PAGE_W | V_PAGE_VM);
-        V_LOG("gdt at %x\n", (unsigned int) h_v2p(world->hregs.gcpu.gdt.base));
+        V_LOG("gdt at %llx\n",
+            (unsigned long long int) h_v2p(world->hregs.gcpu.gdt.base));
         v_spt_add(world, world->htrbase, cr3);
         h_monitor_setup_data_pages(world, world->htrbase);
     } else {

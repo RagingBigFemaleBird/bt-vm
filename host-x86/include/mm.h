@@ -32,7 +32,12 @@
 
 #define H_MEM_POOL_DEFAULT_ORDER 10
 
-typedef unsigned long h_addr_t;
+//#define H_MM_USE_PAE
+#ifdef H_MM_USE_PAE
+typedef unsigned long long h_addr_t;
+#else
+typedef unsigned int h_addr_t;
+#endif
 
 struct v_chunk;
 
@@ -67,7 +72,7 @@ void h_set_p2m(struct v_world *, g_addr_t, unsigned long, h_addr_t);
 /* set mapping specified by translation base, va, pa, attr */
 void h_set_map(h_addr_t, h_addr_t, h_addr_t, h_addr_t, int);
 
-void h_clear_page(h_addr_t);
+void h_clear_page(void *);
 
 void h_pin(h_addr_t);
 

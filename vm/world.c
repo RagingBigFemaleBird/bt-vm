@@ -63,7 +63,7 @@ v_create_world(unsigned long pages)
     world->htrbase = (long int) (trbase->phys);
     for (i = 0; i < (1 << H_TRBASE_ORDER); i++) {
         htrv = h_allocv(world->htrbase + i * H_PAGE_SIZE);
-        h_clear_page((long int) htrv);
+        h_clear_page(htrv);
         h_deallocv(world->htrbase + i * H_PAGE_SIZE);
     }
     V_EVENT(">World created, TrBase = %lx, ", world->htrbase);
@@ -108,7 +108,7 @@ v_destroy_world(struct v_world *world)
     int i;
     struct v_chunk chunk;
     chunk.order = 1;
-    chunk.phys = h_v2p((h_addr_t) (world));
+    chunk.phys = h_v2p((h_addr_t) world);
     for (i = 0; i < world->pages; i++) {
     }
     h_raw_dealloc(world->page_list);
