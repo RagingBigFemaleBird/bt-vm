@@ -21,6 +21,7 @@
 #include "host/include/world.h"
 #include "guest/include/world.h"
 #include "vm/include/bt.h"
+#include "vm/include/mm.h"
 
 #define VM_PAUSED 2
 #define VM_IDLE 1
@@ -54,6 +55,8 @@ struct v_world {
     struct v_poi *bp_to_poi[H_DEBUG_MAX_BP];
     unsigned int status;
     unsigned int relocate;
+    struct v_mem_pool host_pools[V_MM_MAX_POOL];
+    unsigned int pool_count;
 #ifdef BT_CACHE
     struct lru_cache *pb_cache;
 #endif

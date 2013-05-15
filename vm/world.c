@@ -89,6 +89,7 @@ v_create_world(unsigned long pages)
     g_world_init(world, pages);
     world->poi = NULL;
     world->spt_list = NULL;
+    world->pool_count = 0;
 #ifdef BT_CACHE
     world->pb_cache = lru_cache_init(2047, sizeof(struct cache_target_payload));
 #endif

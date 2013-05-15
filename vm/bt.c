@@ -173,10 +173,10 @@ v_add_ipoi(struct v_world *world, unsigned int addr, unsigned int key,
  * add point of interest
  */
 struct v_poi *
-v_add_poi(struct v_page *mpage, unsigned int addr,
+v_add_poi(struct v_world *world, struct v_page *mpage, unsigned int addr,
     unsigned int type, unsigned int mode)
 {
-    struct v_poi *poi = h_raw_malloc(sizeof(struct v_poi));
+    struct v_poi *poi = v_mem_pool_alloc(world, sizeof(struct v_poi));
     poi->addr = addr;
     poi->type = type;
     poi->ex_mode = mode;
@@ -252,7 +252,7 @@ v_translate(struct v_world *world, unsigned long ip)
         poi = v_find_poi(mpage, ip);
         if (poi != NULL)
             return poi;
-        poi = v_add_poi(mpage, ip, i_type, g_get_current_ex_mode(world));
+        poi = v_add_poi(world, mpage, ip, i_type, g_get_current_ex_mode(world));
         if ((mpage->attr & V_PAGE_TYPE_MASK) == V_PAGE_EXD) {
             mpage->attr &= (~V_PAGE_TYPE_MASK);
             mpage->attr |= V_PAGE_STEP;
@@ -288,7 +288,8 @@ v_translate_cue(struct v_world *world, unsigned long ip)
         cue = v_find_poi(mpage, ip);
         if (cue != NULL)
             return poi;
-        cue = v_add_poi(mpage, ip, V_INST_I, g_get_current_ex_mode(world));
+        cue =
+            v_add_poi(world, mpage, ip, V_INST_I, g_get_current_ex_mode(world));
         cue->next_inst = poi;
         if ((mpage->attr & V_PAGE_TYPE_MASK) == V_PAGE_EXD) {
             mpage->attr &= (~V_PAGE_TYPE_MASK);

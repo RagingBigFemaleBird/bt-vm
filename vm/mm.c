@@ -355,3 +355,70 @@ v_spt_inv_page(struct v_world *world, struct v_page *mpage)
         spt = spt->next;
     }
 }
+
+void
+v_mem_pool_create(struct v_world *world, unsigned int unit_size,
+    unsigned int order)
+{
+    struct v_chunk *chunk = h_raw_palloc(order);
+    void *virt = h_allocv(chunk->phys);
+    unsigned int size = (H_PAGE_SIZE) * (1 << order);
+    unsigned int count = size / unit_size;
+    unsigned int bitmap_size = V_MM_POOL_BITMAP_SIZE(count);
+    V_VERBOSE("Creating pool of size %x count %x", size, count);
+    h_memset(virt, 0, bitmap_size);
+    world->host_pools[world->pool_count].virt = (h_addr_t) (virt);
+    world->host_pools[world->pool_count].mon_virt = 0;
+    world->host_pools[world->pool_count].phys = chunk->phys;
+    world->host_pools[world->pool_count].unit_size = unit_size;
+    world->host_pools[world->pool_count].total_size = size;
+    world->host_pools[world->pool_count].max_count =
+        (size - bitmap_size) / unit_size;
+    world->host_pools[world->pool_count].alloc_hint = 0;
+    world->pool_count++;
+}
+
+void *
+v_mem_pool_alloc(struct v_world *world, unsigned int unit_size)
+{
+    int i;
+  again:
+    for (i = 0; i < world->pool_count; i++) {
+        if (world->host_pools[i].unit_size == unit_size) {
+            unsigned int start = world->host_pools[i].alloc_hint / 32;
+            unsigned int k = start;
+            do {
+                unsigned int *p =
+                    (unsigned int *) (world->host_pools[i].virt) + k;
+                if (*p != 0xffffffff) {
+                    unsigned int r = *p;
+                    unsigned int b = 0;
+                    while (r & 1) {
+                        b++;
+                        r >>= 1;
+                    }
+                    b = b + k * 32;
+                    if (b < world->host_pools[i].max_count) {
+                        *p = *p | (1 << b);
+                        V_VERBOSE("Pool alloc %x(of %x)", b, i);
+                        world->host_pools[i].alloc_hint = b;
+                        return (void *) (world->host_pools[i].virt +
+                            V_MM_POOL_BITMAP_SIZE(world->
+                                host_pools[i].total_size /
+                                world->host_pools[i].unit_size) +
+                            world->host_pools[i].unit_size * b);
+                    }
+                }
+                k++;
+                if (k > world->host_pools[i].max_count / 32) {
+                    k = 0;
+                }
+            } while (k != start);
+        }
+    }
+    if (world->pool_count >= V_MM_MAX_POOL)
+        return NULL;
+    V_VERBOSE("New pool");
+    v_mem_pool_create(world, unit_size, H_MEM_POOL_DEFAULT_ORDER);
+    goto again;
+}

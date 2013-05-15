@@ -103,6 +103,25 @@ struct v_ptp_info {
     struct v_ptp_info *next;
 };
 
+#define V_MM_MAX_POOL 5
+
+#define V_MM_POOL_BITMAP_SIZE(count) ((((count) / 8 + 1) & 0xfffffffc) + 4)
+
+struct v_mem_pool_index {
+    unsigned int pool;
+    unsigned int count;
+};
+
+struct v_mem_pool {
+    h_addr_t virt;
+    h_addr_t phys;
+    h_addr_t mon_virt;
+    unsigned int unit_size;
+    unsigned int total_size;
+    unsigned int alloc_hint;
+    unsigned int max_count;
+};
+
 #define V_MM_FAULT_HANDLED 0
 #define V_MM_FAULT_NP	1
 #define V_MM_FAULT_W	2
@@ -118,4 +137,5 @@ struct v_spt_info *v_spt_get_by_spt(struct v_world *, h_addr_t);
 struct v_spt_info *v_spt_get_by_gpt(struct v_world *, g_addr_t);
 void v_spt_inv_page(struct v_world *, struct v_page *);
 void v_validate_guest_virt(struct v_world *, g_addr_t);
+void *v_mem_pool_alloc(struct v_world *, unsigned int unit_size);
 #endif

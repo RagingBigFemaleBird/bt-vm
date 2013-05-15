@@ -118,8 +118,8 @@ void v_bt(struct v_world *);
 void v_do_bp(struct v_world *, unsigned long, unsigned int);
 void v_translation_purge(struct v_page *);
 struct v_poi *v_find_poi(struct v_page *, unsigned int);
-struct v_poi *v_add_poi(struct v_page *, unsigned int, unsigned int,
-    unsigned int);
+struct v_poi *v_add_poi(struct v_world *, struct v_page *, unsigned int,
+    unsigned int, unsigned int);
 void v_add_ipoi(struct v_world *, unsigned intr, unsigned int, struct v_poi *);
 struct v_fc *v_find_fc(struct v_page *, unsigned int);
 struct v_fc *v_add_fc(struct v_page *, unsigned int, unsigned int);

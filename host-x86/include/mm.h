@@ -30,6 +30,8 @@
 #define H_PFN_NP	0xffffffff
 #define h_p2page(phys) ((phys) >> H_PAGE_SHIFT)
 
+#define H_MEM_POOL_DEFAULT_ORDER 10
+
 typedef unsigned long h_addr_t;
 
 struct v_chunk;
