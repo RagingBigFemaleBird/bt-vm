@@ -223,6 +223,17 @@ h_set_map(unsigned long trbase, h_addr_t va, h_addr_t pa,
     while (pages > 0) {
         void *tr = h_allocv(trbase);
         unsigned int *l1 = tr + h_pt1_off(va);
+        if (h_pt1_off(va) != h_pt1_off(va - H_PAGE_SIZE) && pages >= (1 << 10)
+            && ((*l1) & H_PAGE_P) == 0) {
+            //large page possible
+            (*l1) = h_pt1_format(pa, attr) | H_PAGE_PS;
+            V_LOG("mapping large page %lx to %lx, l1 = %x", va, pa, *l1);
+            h_deallocv(trbase);
+            pages -= (1 << 10);
+            va += H_PAGE_SIZE * (1 << 10);
+            pa += H_PAGE_SIZE * (1 << 10);
+            continue;
+        }
         if (((*l1) & H_PAGE_P) == 0) {
             struct v_chunk *c = h_raw_palloc(0);
             void *l2v = h_allocv(c->phys);
@@ -380,5 +391,30 @@ h_write_guest(struct v_world *world, h_addr_t addr, unsigned int word)
             3 + (addr & 0xfff) - 0xfff);
 
     }
+    return 0;
+}
+
+h_addr_t
+h_monitor_search_big_pages(struct v_world * world, unsigned int trbase,
+    h_addr_t size)
+{
+    unsigned int ret;
+    long long req = size;
+    void *x, *l1;
+    x = h_allocv(trbase);
+    for (ret = 0xe0000000; ret < 0xf0000000; ret += 0x400000) {
+        l1 = h_pt1_off((unsigned int) ret) + x;
+        if (!((*(unsigned int *) l1) & H_PAGE_PS)) {
+            req -= 0x400000;
+            if (req <= 0) {
+                V_VERBOSE("Found %lx spacing in pt", ret + 0x400000 - size);
+                h_deallocv(trbase);
+                return ret + 0x400000 - size;
+            }
+        } else {
+            req = size;
+        }
+    }
+    h_deallocv(trbase);
     return 0;
 }

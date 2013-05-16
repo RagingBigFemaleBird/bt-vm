@@ -108,12 +108,6 @@ v_destroy_world(struct v_world *world)
     chunk.order = 1;
     chunk.phys = h_v2p((h_addr_t) (world));
     for (i = 0; i < world->pages; i++) {
-        struct v_poi *remove = world->page_list[i].poi_list;
-        while (remove != NULL) {
-            struct v_poi *dealloc = remove;
-            remove = remove->next_poi;
-            h_raw_dealloc(dealloc);
-        }
     }
     h_raw_dealloc(world->page_list);
     h_raw_depalloc(&chunk);

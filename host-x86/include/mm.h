@@ -81,5 +81,6 @@ void h_fault_bridge_pages(struct v_world *, h_addr_t);
 int h_read_guest(struct v_world *, h_addr_t, unsigned int *);
 /* write 4 bytes into guest memory */
 int h_write_guest(struct v_world *, h_addr_t, unsigned int);
+h_addr_t h_monitor_search_big_pages(struct v_world *, unsigned int, h_addr_t);
 
 #endif

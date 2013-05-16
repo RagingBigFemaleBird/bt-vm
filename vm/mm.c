@@ -368,7 +368,8 @@ v_mem_pool_create(struct v_world *world, unsigned int unit_size,
     V_VERBOSE("Creating pool of size %x count %x", size, count);
     h_memset(virt, 0, bitmap_size);
     world->host_pools[world->pool_count].virt = (h_addr_t) (virt);
-    world->host_pools[world->pool_count].mon_virt = 0;
+    world->host_pools[world->pool_count].mon_virt =
+        h_monitor_search_big_pages(world, world->htrbase, size);
     world->host_pools[world->pool_count].phys = chunk->phys;
     world->host_pools[world->pool_count].unit_size = unit_size;
     world->host_pools[world->pool_count].total_size = size;
