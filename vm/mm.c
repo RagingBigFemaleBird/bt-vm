@@ -131,7 +131,7 @@ v_page_map(struct v_world *world, struct v_page *page, h_addr_t address)
     struct v_spt_info *spt = v_spt_get_by_spt(world, world->htrbase);
     address = address & H_PFN_MASK;
     if (spt != NULL) {
-        struct v_ptp_info *new;
+        struct v_ptp_info *new_item;
         struct v_ptp_info **p = &(page->ptp_list);
         int exist = 0;
         while (*p != NULL && (!exist)) {
@@ -143,16 +143,16 @@ v_page_map(struct v_world *world, struct v_page *page, h_addr_t address)
         if (!exist) {
             V_VERBOSE("registered addr %lx -> %x", (unsigned long) address,
                 (unsigned int) page->mfn);
-            new = h_raw_malloc(sizeof(struct v_ptp_info));
+            new_item = h_raw_malloc(sizeof(struct v_ptp_info));
             p = &(page->ptp_list);
-            new->vaddr = address;
-            new->spt = spt;
-            new->next = NULL;
-            new->gpt_level = 0;
+            new_item->vaddr = address;
+            new_item->spt = spt;
+            new_item->next = NULL;
+            new_item->gpt_level = 0;
             while (*p != NULL) {
                 p = &((*p)->next);
             }
-            (*p) = new;
+            (*p) = new_item;
         }
     }
 }
@@ -278,12 +278,16 @@ v_pagefault(struct v_world *world, g_addr_t address, int reason)
 void
 v_spt_add(struct v_world *w, h_addr_t spt, g_addr_t gpt)
 {
-    struct v_spt_info *new = h_raw_malloc(sizeof(struct v_spt_info));
-    new->spt_paddr = spt;
-    new->gpt_paddr = gpt;
-    new->next = w->spt_list;
-    new->inv_list = NULL;
-    w->spt_list = new;
+    struct v_spt_info *new_item = h_raw_malloc(sizeof(struct v_spt_info));
+    int i;
+    for (i = 0; i < V_MM_MAX_POOL; i++) {
+        new_item->mem_pool_mapped[i] = 0;
+    }
+    new_item->spt_paddr = spt;
+    new_item->gpt_paddr = gpt;
+    new_item->next = w->spt_list;
+    new_item->inv_list = NULL;
+    w->spt_list = new_item;
 }
 
 struct v_spt_info *
@@ -340,16 +344,16 @@ v_spt_inv_page(struct v_world *world, struct v_page *mpage)
             }
             if (!exist1) {
                 struct v_inv_entry **p = &(spt->inv_list);
-                struct v_inv_entry *new =
+                struct v_inv_entry *new_item =
                     h_raw_malloc(sizeof(struct v_inv_entry));
                 V_VERBOSE("registered at spt %lx", spt->spt_paddr);
-                new->type = 0;
-                new->page = mpage;
-                new->next = NULL;
+                new_item->type = 0;
+                new_item->page = mpage;
+                new_item->next = NULL;
                 while (*p != NULL) {
                     p = &((*p)->next);
                 }
-                (*p) = new;
+                (*p) = new_item;
             }
         }
         spt = spt->next;
@@ -368,8 +372,7 @@ v_mem_pool_create(struct v_world *world, unsigned int unit_size,
     V_VERBOSE("Creating pool of size %x count %x", size, count);
     h_memset(virt, 0, bitmap_size);
     world->host_pools[world->pool_count].virt = (h_addr_t) (virt);
-    world->host_pools[world->pool_count].mon_virt =
-        h_monitor_search_big_pages(world, world->htrbase, size);
+    world->host_pools[world->pool_count].mon_virt = 0;
     world->host_pools[world->pool_count].phys = chunk->phys;
     world->host_pools[world->pool_count].unit_size = unit_size;
     world->host_pools[world->pool_count].total_size = size;
@@ -377,6 +380,7 @@ v_mem_pool_create(struct v_world *world, unsigned int unit_size,
         (size - bitmap_size) / unit_size;
     world->host_pools[world->pool_count].alloc_hint = 0;
     world->pool_count++;
+    h_monitor_setup_data_pages(world, world->htrbase);
 }
 
 void *

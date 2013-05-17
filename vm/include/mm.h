@@ -48,6 +48,20 @@
 #define V_PAGE_NOFAIL	(5<<5)  /* pages that cannot silently fail */
 #define V_PAGE_IO	(6<<5)  /* IO pages */
 
+#define V_MM_MAX_POOL 5
+
+#define V_MM_POOL_BITMAP_SIZE(count) ((((count) / 8 + 1) & 0xfffffffc) + 4)
+
+struct v_mem_pool {
+    h_addr_t virt;
+    h_addr_t phys;
+    h_addr_t mon_virt;
+    unsigned int unit_size;
+    unsigned int total_size;
+    unsigned int alloc_hint;
+    unsigned int max_count;
+};
+
 struct v_io_page_info {
     unsigned int delay;
     int (*handler) (struct v_world *, g_addr_t);
@@ -92,6 +106,7 @@ struct v_inv_entry {
 struct v_spt_info {
     h_addr_t spt_paddr;
     g_addr_t gpt_paddr;
+    unsigned char mem_pool_mapped[V_MM_MAX_POOL];
     struct v_inv_entry *inv_list;
     struct v_spt_info *next;
 };
@@ -101,25 +116,6 @@ struct v_ptp_info {
     g_addr_t vaddr;
     unsigned int gpt_level;     //0 for now
     struct v_ptp_info *next;
-};
-
-#define V_MM_MAX_POOL 5
-
-#define V_MM_POOL_BITMAP_SIZE(count) ((((count) / 8 + 1) & 0xfffffffc) + 4)
-
-struct v_mem_pool_index {
-    unsigned int pool;
-    unsigned int count;
-};
-
-struct v_mem_pool {
-    h_addr_t virt;
-    h_addr_t phys;
-    h_addr_t mon_virt;
-    unsigned int unit_size;
-    unsigned int total_size;
-    unsigned int alloc_hint;
-    unsigned int max_count;
 };
 
 #define V_MM_FAULT_HANDLED 0

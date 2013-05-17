@@ -92,8 +92,7 @@ struct h_cpu {
     unsigned int cr3;
     unsigned int cr4;
 
-    unsigned int _barrier1;
-    unsigned int _barrier2;
+    unsigned int _mointor_stacks[16];
 
     unsigned int gs;
     unsigned int fs;

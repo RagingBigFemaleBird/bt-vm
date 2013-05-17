@@ -179,6 +179,7 @@ btc_work_func(struct work_struct *work)
     unsigned long flags;
     struct v_world *curr;
     spin_lock_irqsave(&e_lock, flags);
+    preempt_disable();
     curr = w_list;
     if (curr->status != VM_PAUSED) {
 /*	if ((stepping % 150) == 2)
@@ -207,6 +208,7 @@ btc_work_func(struct work_struct *work)
             }
         h_int_restore();
     }
+    preempt_enable();
     spin_unlock_irqrestore(&e_lock, flags);
 }
 

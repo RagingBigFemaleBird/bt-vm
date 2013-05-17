@@ -749,6 +749,44 @@ v_dump_pb_cache(struct v_world *world)
 }
 #endif
 
+#ifdef V_POI_PB_CACHED_POI
+
+void
+v_update_pb_cache_poi(struct v_world *world, struct v_poi *poi,
+    unsigned long dest)
+{
+    int i;
+    struct v_poi_pb_cache_poi *cache = &(poi->pb_cache_poi);
+    struct v_poi *poi_dest;
+    g_addr_t phys;
+    struct v_page *mpage;
+    phys = g_v2p(world, dest, 1);
+    if (phys >= world->pa_top) {
+        V_ERR("Error: guest page fault @ v_bt, crazy phys addr %lx, %x\n", dest,
+            phys);
+        return;
+    }
+    mpage = h_p2mp(world, phys);
+    if ((poi_dest = v_find_poi(mpage, dest)) == NULL) {
+        return;
+    }
+    for (i = 0; i < cache->total; i++) {
+        if (cache->targets[i]->addr == dest)
+            return;
+    }
+    if (cache->total >= V_POI_PB_CACHE_ENTIRES_TOTAL) {
+        cache->targets[cache->replace] = poi_dest;
+        cache->replace++;
+        if (cache->replace >= V_POI_PB_CACHE_ENTIRES_TOTAL)
+            cache->replace = 0;
+    } else {
+        cache->targets[cache->total] = poi_dest;
+        cache->total++;
+    }
+}
+
+#endif
+
 /**
  * @in addr virtual address
  * @in is_step world is stepping
@@ -789,6 +827,9 @@ v_do_bp(struct v_world *world, unsigned long addr, unsigned int is_step)
     if (is_step) {
         h_step_off(world);
         if (!(ip == world->poi->addr)) {
+#ifdef V_POI_PB_CACHED_POI
+            v_update_pb_cache_poi(world, world->poi, ip);
+#endif
 #ifdef BT_CACHE
             v_update_pb_cache(world->poi, ip);
 #ifdef __DEBUG_BT_CACHE

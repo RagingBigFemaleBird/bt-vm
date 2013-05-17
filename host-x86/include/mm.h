@@ -82,5 +82,5 @@ int h_read_guest(struct v_world *, h_addr_t, unsigned int *);
 /* write 4 bytes into guest memory */
 int h_write_guest(struct v_world *, h_addr_t, unsigned int);
 h_addr_t h_monitor_search_big_pages(struct v_world *, unsigned int, h_addr_t);
-
+void h_monitor_setup_data_pages(struct v_world *, h_addr_t);
 #endif

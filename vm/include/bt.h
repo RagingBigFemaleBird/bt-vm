@@ -37,7 +37,7 @@ struct v_poi_tree_plan {
     unsigned char count;
     struct v_poi *poi[8];       /*todo: this constant */
 };
-#define BT_CACHE
+
 #define BT_CACHE_LEVEL 16
 #define BT_CACHE_CAPACITY 36
 #define BT_CACHE_TARGET_ENTRIES_TOTAL 4
@@ -69,6 +69,13 @@ struct v_poi_pb_cache {
     unsigned int targets[V_POI_PB_CACHE_ENTIRES_TOTAL];
 };
 
+#ifdef V_POI_PB_CACHED_POI
+struct v_poi_pb_cache_poi {
+    unsigned int total;
+    unsigned int replace;
+    struct v_poi *targets[V_POI_PB_CACHE_ENTIRES_TOTAL];
+};
+#endif
 
 struct v_poi {
     unsigned int type;
@@ -90,6 +97,9 @@ struct v_poi {
     int invalidate_cached_plan_count;
     int cache_threshold;
     struct v_poi_pb_cache pb_cache;
+#endif
+#ifdef V_POI_PB_CACHED_POI
+    struct v_poi_pb_cache_poi pb_cache_poi;
 #endif
 };
 

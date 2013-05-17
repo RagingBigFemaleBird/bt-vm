@@ -223,8 +223,7 @@ h_set_map(unsigned long trbase, h_addr_t va, h_addr_t pa,
     while (pages > 0) {
         void *tr = h_allocv(trbase);
         unsigned int *l1 = tr + h_pt1_off(va);
-        if (h_pt1_off(va) != h_pt1_off(va - H_PAGE_SIZE) && pages >= (1 << 10)
-            && ((*l1) & H_PAGE_P) == 0) {
+        if (h_pt1_off(va) != h_pt1_off(va - H_PAGE_SIZE) && pages >= (1 << 10)) {
             //large page possible
             (*l1) = h_pt1_format(pa, attr) | H_PAGE_PS;
             V_LOG("mapping large page %lx to %lx, l1 = %x", va, pa, *l1);
@@ -234,7 +233,7 @@ h_set_map(unsigned long trbase, h_addr_t va, h_addr_t pa,
             pa += H_PAGE_SIZE * (1 << 10);
             continue;
         }
-        if (((*l1) & H_PAGE_P) == 0) {
+        if (((*l1) & H_PAGE_P) == 0 || ((*l1) & H_PAGE_PS)) {
             struct v_chunk *c = h_raw_palloc(0);
             void *l2v = h_allocv(c->phys);
             unsigned int *l2 = l2v + h_pt2_off(va);
@@ -288,6 +287,7 @@ h_get_map(h_addr_t trbase, h_addr_t virt)
 void
 h_fault_bridge_pages(struct v_world *w, h_addr_t virt)
 {
+    int i;
     virt = virt & H_PFN_MASK;
     if (virt == ((unsigned int) (w->hregs.hcpu.switcher) & H_PFN_MASK)) {
         h_relocate_npage(w);
@@ -305,11 +305,25 @@ h_fault_bridge_pages(struct v_world *w, h_addr_t virt)
         w->relocate = 1;
         return;
     }
+    for (i = 0; i < w->pool_count; i++) {
+        if (w->host_pools[i].mon_virt != 0 && w->host_pools[i].mon_virt <= virt
+            && w->host_pools[i].mon_virt + w->host_pools[i].total_size >=
+            virt) {
+            struct v_spt_info *p = w->spt_list;
+            w->host_pools[i].mon_virt = 0;
+            while (p != NULL) {
+                p->mem_pool_mapped[i] = 0;
+                p = p->next;
+            }
+            return;
+        }
+    }
 }
 
 unsigned int
 h_check_bridge_pages(struct v_world *w, h_addr_t virt)
 {
+    int i;
     virt = virt & H_PFN_MASK;
     if (virt == ((h_addr_t) (w->hregs.hcpu.switcher) & H_PFN_MASK)) {
         return 1;
@@ -322,6 +336,13 @@ h_check_bridge_pages(struct v_world *w, h_addr_t virt)
     }
     if (virt == ((h_addr_t) (w) & H_PFN_MASK)) {
         return 1;
+    }
+    for (i = 0; i < w->pool_count; i++) {
+        if (w->host_pools[i].mon_virt != 0 && w->host_pools[i].mon_virt <= virt
+            && w->host_pools[i].mon_virt + w->host_pools[i].total_size >=
+            virt) {
+            return 1;
+        }
     }
     return 0;
 }
@@ -417,4 +438,33 @@ h_monitor_search_big_pages(struct v_world * world, unsigned int trbase,
     }
     h_deallocv(trbase);
     return 0;
+}
+
+void
+h_monitor_setup_data_pages(struct v_world *world, h_addr_t sptbase)
+{
+    struct v_spt_info *spt;
+    int i;
+    if ((spt = v_spt_get_by_spt(world, sptbase)) == NULL) {
+        V_ERR("Cannot setup monitor pages. SPT bug?");
+        return;
+    }
+    for (i = 0; i < world->pool_count; i++) {
+        if (world->host_pools[i].mon_virt == 0) {
+            world->host_pools[i].mon_virt =
+                h_monitor_search_big_pages(world, sptbase,
+                world->host_pools[i].total_size);
+            if (world->host_pools[i].mon_virt == 0) {
+                V_ERR("Cannot find suitable mapping @ guest world");
+                return;
+            }
+        }
+        if (spt->mem_pool_mapped[i] == 0) {
+            spt->mem_pool_mapped[i] = 1;
+            h_set_map(sptbase, world->host_pools[i].mon_virt,
+                world->host_pools[i].phys,
+                world->host_pools[i].total_size / H_PAGE_SIZE,
+                V_PAGE_W | V_PAGE_VM);
+        }
+    }
 }

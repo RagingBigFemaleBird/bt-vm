@@ -30,6 +30,8 @@
 
 struct lru_cache;
 
+#define MONITOR_BUFFER_MAX 512
+
 struct v_world {
     //every cpu status in the view of host machine
     struct h_regs hregs;
@@ -60,6 +62,9 @@ struct v_world {
 #ifdef BT_CACHE
     struct lru_cache *pb_cache;
 #endif
+    unsigned int monitor_buffer_start;
+    unsigned int monitor_buffer_end;
+    unsigned char monitor_buffer[MONITOR_BUFFER_MAX];
 };
 
 struct v_world *v_create_world(unsigned long);

@@ -37,6 +37,7 @@
 extern volatile int step;
 extern volatile int time_up;
 struct h_cpu hostcpu;
+#define QUICKPATH_GP_ENABLED
 
 static void h_do_int(unsigned int int_no);
 
@@ -44,15 +45,23 @@ unsigned int bpaddr = /*0x8100; */ 0;   //0xc022e294;     //0x226255;
 unsigned int bp_reached = 0;
 #ifdef BT_CACHE
 static int cache_offset;
-static int sensitive_instruction_cache_offset;
 void bt_cache_start(void);
+#endif
+#ifdef QUICKPATH_GP_ENABLED
 void sensitive_instruction_cache(void);
+static int sensitive_instruction_cache_offset;
 #endif
 void h_switcher(unsigned long trbase, struct v_world *w);
 
 int
 h_cpu_init(void)
 {
+    int wd_size = sizeof(struct v_world);
+    V_ERR("World data size = %x", wd_size);
+    if (wd_size > H_PAGE_SIZE) {
+        V_ERR("Stop: world data size too large.");
+        return 1;
+    }
     asm volatile ("movl %%cr0, %0":"=r" (hostcpu.cr0):);
     V_LOG("CR0: %x\n", hostcpu.cr0);
     asm volatile ("movl %%cr3, %0":"=r" (hostcpu.cr3):);
@@ -88,6 +97,8 @@ h_cpu_init(void)
     asm volatile ("movl $restoreCS, %0":"=r" (hostcpu.eip));
 #ifdef BT_CACHE
     cache_offset = ((void *) bt_cache_start) - ((void *) h_switcher);
+#endif
+#ifdef QUICKPATH_GP_ENABLED
     sensitive_instruction_cache_offset =
         ((void *) sensitive_instruction_cache) - ((void *) h_switcher);
 #endif
@@ -444,8 +455,6 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
 #define CACHE_BT_QUICKPATH
 #endif
 
-#define QUICKPATH_GP_ENABLED
-
 #ifdef QUICKPATH_GP_ENABLED
 #define GP_FAULT_QUICKPATH \
     asm volatile ("cmp $(~0xd + 0x80), (%esp)");\
@@ -618,6 +627,121 @@ __attribute__ ((aligned (0x1000)))
 void
 h_switcher(unsigned long trbase, struct v_world *w)
 {
+    void monitor_log(struct v_world *mon_world, char c) {
+        mon_world->monitor_buffer[mon_world->monitor_buffer_end] = c;
+        mon_world->monitor_buffer_end++;
+        if (mon_world->monitor_buffer_end >= MONITOR_BUFFER_MAX) {
+            mon_world->monitor_buffer_end = 0;
+        }
+    }
+    void *monitor_access(struct v_world *world, void *ptr) {
+        int i;
+        for (i = 0; i < world->pool_count; i++) {
+            if (world->host_pools[i].virt <= (unsigned int) (ptr)
+                && world->host_pools[i].virt + world->host_pools[i].total_size >
+                (unsigned int) (ptr)) {
+                return (void *) ((unsigned int) (ptr) -
+                    world->host_pools[i].virt + world->host_pools[i].mon_virt);
+            }
+        }
+        return NULL;
+    }
+    inline void monitor(void) {
+        struct v_world *mon_world;
+        int dr;
+        struct v_poi *poi, *poi_new;
+        unsigned int i;
+        unsigned int addr;
+        asm volatile ("mov %%esp, %0":"=r" (mon_world));
+        asm volatile ("mov %esp, %ebp");
+        mon_world =
+            (struct v_world *) ((unsigned int) (mon_world) & H_PFN_MASK);
+        poi = (struct v_poi *) monitor_access(mon_world, mon_world->poi);
+//        monitor_log(mon_world, 't');
+//        monitor_log(mon_world, '0' + poi->type);
+
+        asm volatile ("mov %%dr6, %0":"=r" (dr));
+        if (!(dr & 0x4000)) {
+            /* we are not single stepping */
+            if (dr & 1) {
+                poi_new = mon_world->bp_to_poi[0];
+            } else if (dr & 2) {
+                poi_new = mon_world->bp_to_poi[1];
+            } else if (dr & 4) {
+                poi_new = mon_world->bp_to_poi[2];
+            } else if (dr & 8) {
+                poi_new = mon_world->bp_to_poi[3];
+            }
+            poi = (struct v_poi *) monitor_access(mon_world, poi_new);
+            if ((poi->type & V_INST_U) || (poi->type & V_INST_PB)) {
+                mon_world->poi = poi_new;
+                poi->expect = 1;
+                mon_world->hregs.gcpu.eflags |= (H_EFLAGS_TF | H_EFLAGS_RF);
+                mon_world->hregs.gcpu.dr7 &= (0xffffff00);
+                mon_world->gregs.rf = 1;
+                dr &= 0xffff0ff0;
+                asm volatile ("mov %0, %%dr6"::"r" (dr));
+                asm volatile ("popa");
+                asm volatile ("add $12, %esp");
+                asm volatile ("iret");
+            }
+            if ((poi->type & V_INST_CB) && poi->plan.valid) {
+                mon_world->poi = poi_new;
+                poi->expect = 0;
+                dr &= 0xffff0ff0;
+                asm volatile ("mov %0, %%dr6"::"r" (dr));
+                mon_world->hregs.gcpu.eflags &= (~H_EFLAGS_RF);
+                mon_world->hregs.gcpu.dr7 &= (0xffffff00);
+                i = 0x703;
+                mon_world->bp_to_poi[0] = poi->plan.poi[0];
+                mon_world->current_valid_bps = 1;
+                poi_new =
+                    (struct v_poi *) monitor_access(mon_world,
+                    poi->plan.poi[0]);
+                addr = poi_new->addr;
+                mon_world->hregs.gcpu.dr0 = addr;
+                asm volatile ("mov %0, %%dr0"::"r" (addr));
+                if (poi->plan.count > 1) {
+                    i |= (3 << 2);
+                    mon_world->bp_to_poi[1] = poi->plan.poi[1];
+                    mon_world->current_valid_bps = 2;
+                    poi_new =
+                        (struct v_poi *) monitor_access(mon_world,
+                        poi->plan.poi[1]);
+                    addr = poi_new->addr;
+                    mon_world->hregs.gcpu.dr1 = addr;
+                    asm volatile ("mov %0, %%dr1"::"r" (addr));
+                    if (poi->plan.count > 2) {
+                        i |= (3 << 4);
+                        mon_world->bp_to_poi[2] = poi->plan.poi[2];
+                        mon_world->current_valid_bps = 3;
+                        poi_new =
+                            (struct v_poi *) monitor_access(mon_world,
+                            poi->plan.poi[2]);
+                        addr = poi_new->addr;
+                        mon_world->hregs.gcpu.dr2 = addr;
+                        asm volatile ("mov %0, %%dr2"::"r" (addr));
+                        if (poi->plan.count > 3) {
+                            i |= (3 << 6);
+                            mon_world->bp_to_poi[3] = poi->plan.poi[3];
+                            mon_world->current_valid_bps = 4;
+                            poi_new =
+                                (struct v_poi *) monitor_access(mon_world,
+                                poi->plan.poi[3]);
+                            addr = poi_new->addr;
+                            mon_world->hregs.gcpu.dr3 = addr;
+                            asm volatile ("mov %0, %%dr3"::"r" (addr));
+                        }
+                    }
+                }
+                mon_world->hregs.gcpu.dr7 |= i;
+                asm volatile ("mov %0, %%dr7"::"r" (mon_world->hregs.gcpu.dr7));
+                asm volatile ("popa");
+                asm volatile ("add $12, %esp");
+                asm volatile ("iret");
+            }
+        }
+    }
     h_addr_t tr = (h_addr_t) trbase;
     struct h_regs *h = &w->hregs;
     asm volatile ("cli");
@@ -626,12 +750,12 @@ h_switcher(unsigned long trbase, struct v_world *w)
     } else {
         asm volatile ("movl %0, %%cr0"::"r" (h->hcpu.cr0 | H_CR0_TS));
     }
-    asm("movl %0, %%dr7"::"r"(w->hregs.gcpu.dr7));
-    asm("movl %0, %%dr0"::"r"(w->hregs.gcpu.dr0));
-    asm("movl %0, %%dr1"::"r"(w->hregs.gcpu.dr1));
-    asm("movl %0, %%dr2"::"r"(w->hregs.gcpu.dr2));
-    asm("movl %0, %%dr3"::"r"(w->hregs.gcpu.dr3));
-    asm("movl %0, %%dr6"::"r"(0xffff0ff0));
+    asm volatile ("movl %0, %%dr7"::"r" (w->hregs.gcpu.dr7));
+    asm volatile ("movl %0, %%dr0"::"r" (w->hregs.gcpu.dr0));
+    asm volatile ("movl %0, %%dr1"::"r" (w->hregs.gcpu.dr1));
+    asm volatile ("movl %0, %%dr2"::"r" (w->hregs.gcpu.dr2));
+    asm volatile ("movl %0, %%dr3"::"r" (w->hregs.gcpu.dr3));
+    asm volatile ("movl %0, %%dr6"::"r" (0xffff0ff0));
     {
         void *gdt = (void *) (h->gcpu.gdt.base);
         unsigned int *c;
@@ -685,6 +809,19 @@ h_switcher(unsigned long trbase, struct v_world *w)
     asm volatile ("cmp $(~0x11 + 0x80), (%esp)");
     asm volatile ("je 3f");
     CACHE_BT_QUICKPATH;
+#ifdef BT_CACHE
+#error Cannot have both monitor and BT cache!
+#endif
+    asm volatile ("cmp $(~0x1 + 0x80), (%esp)");
+    asm volatile ("jne 9f");
+    /*monitor start */
+    asm volatile ("push $0xbeef");
+    asm volatile ("sub $4, %esp");
+    asm volatile ("pusha");
+    monitor();
+    asm volatile ("jmp 8f");
+    /*monitor end */
+    asm volatile ("9:");
     asm volatile ("push $0xbeef");      /* some impossible value */
 
     asm volatile ("3:");
@@ -809,6 +946,18 @@ h_switch_to(unsigned long trbase, struct v_world *w)
     if ((h->gcpu.fs & 0xffff0000) != 0 || (h->gcpu.es & 0xffff0000) != 0
         || (h->gcpu.gs & 0xffff0000) != 0) {
         V_EVENT("Monitor fault");
+    }
+    if (w->monitor_buffer_start != w->monitor_buffer_end) {
+        char buffer[MONITOR_BUFFER_MAX];
+        int cp = 0;
+        while (w->monitor_buffer_start != w->monitor_buffer_end) {
+            buffer[cp++] = w->monitor_buffer[w->monitor_buffer_start++];
+            if (w->monitor_buffer_start >= MONITOR_BUFFER_MAX) {
+                w->monitor_buffer_start = 0;
+            }
+        }
+        buffer[cp] = 0;
+        V_ERR("Monitor log: %s", buffer);
     }
     h->gcpu.es = h->gcpu.es & 0xffff;
     h->gcpu.fs = h->gcpu.fs & 0xffff;
@@ -1086,6 +1235,10 @@ h_inv_pagetable(struct v_world *world, struct v_spt_info *spt,
     h_set_map(spt->spt_paddr, (h_addr_t) world->hregs.gcpu.gdt.base,
         h_v2p(world->hregs.gcpu.gdt.base), 1, V_PAGE_W | V_PAGE_VM);
     V_LOG("gdt at %x\n", (unsigned int) h_v2p(world->hregs.gcpu.gdt.base));
+    for (i = 0; i < V_MM_MAX_POOL; i++) {
+        spt->mem_pool_mapped[i] = 0;
+    }
+    h_monitor_setup_data_pages(world, spt->spt_paddr);
 
 }
 
@@ -1155,10 +1308,12 @@ h_new_trbase(struct v_world *world)
             h_v2p(world->hregs.gcpu.gdt.base), 1, V_PAGE_W | V_PAGE_VM);
         V_LOG("gdt at %x\n", (unsigned int) h_v2p(world->hregs.gcpu.gdt.base));
         v_spt_add(world, world->htrbase, cr3);
+        h_monitor_setup_data_pages(world, world->htrbase);
     } else {
         V_EVENT("spt found at %lx for %x", spt->spt_paddr, cr3);
         world->htrbase = spt->spt_paddr;
         h_inv_spt(world, spt);
+        h_monitor_setup_data_pages(world, world->htrbase);
     }
 
 }
