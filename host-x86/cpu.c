@@ -649,10 +649,14 @@ h_switcher(unsigned long trbase, struct v_world *w)
         return NULL;
     }
     inline void monitor(void) {
+        /* important:
+         * do not initialize any var declared here: no stack yet
+         * do not use 'break' anywhere, it breaks
+         */
         struct v_world *mon_world;
         int dr;
-        struct v_poi *poi, *poi_new;
-        unsigned int i;
+        struct v_poi *poi, *poi_new, *temp, *temp2;
+        unsigned int i, process;
         unsigned int addr;
         asm volatile ("mov %%esp, %0":"=r" (mon_world));
         asm volatile ("mov %esp, %ebp");
@@ -663,6 +667,7 @@ h_switcher(unsigned long trbase, struct v_world *w)
 //        monitor_log(mon_world, '0' + poi->type);
 
         asm volatile ("mov %%dr6, %0":"=r" (dr));
+        process = 0;
         if (!(dr & 0x4000)) {
             /* we are not single stepping */
             if (dr & 1) {
@@ -674,6 +679,70 @@ h_switcher(unsigned long trbase, struct v_world *w)
             } else if (dr & 8) {
                 poi_new = mon_world->bp_to_poi[3];
             }
+            process = 1;
+        }
+#ifdef V_POI_PB_CACHED_POI
+        else {
+            /* out of ss */
+
+            /* todo: assuming flat mem */
+            for (i = 0; i < poi->pb_cache_poi.total; i++) {
+                temp =
+                    (struct v_poi *) monitor_access(mon_world,
+                    poi->pb_cache_poi.targets[i]);
+                if (temp->addr == mon_world->hregs.gcpu.eip) {
+                    temp2 = NULL;
+                    if (temp != NULL && (temp->type & V_INST_I)) {
+                        while (temp != NULL && (temp->type & V_INST_I)) {
+                            if (temp->next_inst == NULL) {
+                                temp = NULL;
+                            } else {
+                                temp2 = temp->next_inst;
+                                temp =
+                                    (struct v_poi *) monitor_access(mon_world,
+                                    temp->next_inst);
+                            }
+                        }
+                    }
+                    if (temp != NULL) {
+                        if (temp->type & V_INST_CB) {
+                            poi_new = temp2;
+                            process = 2;
+                        }
+                        if (temp->type & V_INST_PB) {
+                            if (temp2 == NULL) {
+                                poi_new = poi->pb_cache_poi.targets[i];
+                                process = 2;
+                            } else {
+                                mon_world->poi = poi->pb_cache_poi.targets[i];
+                                temp->expect = 0;
+                                dr &= 0xffff0ff0;
+                                asm volatile ("mov %0, %%dr6"::"r" (dr));
+                                mon_world->hregs.gcpu.eflags &= (~H_EFLAGS_RF);
+                                mon_world->hregs.gcpu.dr7 &= (0xffffff00);
+                                mon_world->bp_to_poi[0] =
+                                    poi->pb_cache_poi.targets[i];
+                                mon_world->current_valid_bps = 1;
+                                mon_world->gregs.rf = 0;
+                                addr = temp->addr;
+                                mon_world->hregs.gcpu.dr0 = addr;
+                                asm volatile ("mov %0, %%dr0"::"r" (addr));
+                                mon_world->hregs.gcpu.dr7 |= 0x703;
+                                asm volatile ("mov %0, %%dr7"::
+                                    "r" (mon_world->hregs.gcpu.dr7));
+                                asm volatile ("pop %es");
+                                asm volatile ("pop %ds");
+                                asm volatile ("popa");
+                                asm volatile ("add $12, %esp");
+                                asm volatile ("iret");
+                            }
+                        }
+                    }
+                }
+            }
+        }
+#endif
+        if (process) {
             poi = (struct v_poi *) monitor_access(mon_world, poi_new);
             if ((poi->type & V_INST_U) || (poi->type & V_INST_PB)) {
                 mon_world->poi = poi_new;
@@ -683,6 +752,8 @@ h_switcher(unsigned long trbase, struct v_world *w)
                 mon_world->gregs.rf = 1;
                 dr &= 0xffff0ff0;
                 asm volatile ("mov %0, %%dr6"::"r" (dr));
+                asm volatile ("pop %es");
+                asm volatile ("pop %ds");
                 asm volatile ("popa");
                 asm volatile ("add $12, %esp");
                 asm volatile ("iret");
@@ -738,47 +809,13 @@ h_switcher(unsigned long trbase, struct v_world *w)
                 }
                 mon_world->hregs.gcpu.dr7 |= i;
                 asm volatile ("mov %0, %%dr7"::"r" (mon_world->hregs.gcpu.dr7));
+                asm volatile ("pop %es");
+                asm volatile ("pop %ds");
                 asm volatile ("popa");
                 asm volatile ("add $12, %esp");
                 asm volatile ("iret");
             }
         }
-#ifdef V_POI_PB_CACHED_POI
-         else {
-            /* out of ss */
-            struct v_poi *temp;
-            unsigned int i;
-            /* todo: assuming flat mem */
-            for (i = 0; i < poi->pb_cache_poi.total; i++) {
-                temp = (struct v_poi *) monitor_access(mon_world, poi->pb_cache_poi.targets[i]);
-                if (temp->addr == mon_world->hregs.gcpu.eip) {
-/*                    monitor_log(mon_world, 'm');
-                    if (temp->type & V_INST_I) {
-                        while (temp != NULL && (temp->type & V_INST_I)) {
-                            monitor_log(mon_world, 'i');
-                            if (temp->next_inst == NULL) {
-                                temp = NULL;
-                                break;
-                            }
-                            temp = (struct v_poi *) monitor_access(mon_world, temp->next_inst);
-                        }
-                    }
-                    if (temp == NULL) {
-                        break;
-                    }
-*/
-
-
-                    if (temp->type & V_INST_CB) {
-                        monitor_log(mon_world, 'C');
-                    }
-                    if (temp->type & V_INST_PB) {
-                        monitor_log(mon_world, 'P');
-                    }
-                }
-            }
-        }
-#endif
     }
     h_addr_t tr = (h_addr_t) trbase;
     struct h_regs *h = &w->hregs;
@@ -856,8 +893,13 @@ h_switcher(unsigned long trbase, struct v_world *w)
     asm volatile ("push $0xbeef");
     asm volatile ("sub $4, %esp");
     asm volatile ("pusha");
+    asm volatile ("push %ds");
+    asm volatile ("push %es");
+    asm volatile ("mov %ss, %ax");
+    asm volatile ("mov %ax, %ds");
+    asm volatile ("mov %ax, %es");
     monitor();
-    asm volatile ("jmp 8f");
+    asm volatile ("jmp 10f");
     /*monitor end */
     asm volatile ("9:");
     asm volatile ("push $0xbeef");      /* some impossible value */
@@ -869,7 +911,7 @@ h_switcher(unsigned long trbase, struct v_world *w)
     asm volatile ("cmp $0x12345678, %esp");
     asm volatile ("je 180f");
     asm volatile ("mov $0x12345678, %esp");
-    asm volatile ("jmp 8f");
+    asm volatile ("jmp 10f");
     asm volatile ("180:");
     /* */
     GP_FAULT_QUICKPATH;
@@ -880,6 +922,7 @@ h_switcher(unsigned long trbase, struct v_world *w)
     asm volatile ("8:");
     asm volatile ("push %ds");
     asm volatile ("push %es");
+    asm volatile ("10:");
     asm volatile ("push %fs");
     asm volatile ("push %gs");
 

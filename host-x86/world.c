@@ -39,7 +39,7 @@ h_monitor_fault_check_fixup(struct v_world *world)
     *(unsigned int *) (h_switcher_page + monitor_offset + 2) =
         monitor_stack_offset;
     *(unsigned int *) (h_switcher_page + monitor_offset + 6 + 2 + 1) =
-        monitor_stack_offset - 8 * 4 - 4;
+        monitor_stack_offset - 8 * 4 - 12;
     V_ERR("fixing monitor stack check @%x to %x",
         h_switcher_page + monitor_offset, monitor_stack_offset);
 }
