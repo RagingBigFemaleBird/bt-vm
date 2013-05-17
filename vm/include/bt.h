@@ -68,6 +68,7 @@ struct v_poi_pb_cache {
     unsigned int replace;
     unsigned int targets[V_POI_PB_CACHE_ENTIRES_TOTAL];
 };
+#define V_POI_PB_CACHED_POI
 
 #ifdef V_POI_PB_CACHED_POI
 struct v_poi_pb_cache_poi {

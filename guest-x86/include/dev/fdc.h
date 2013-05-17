@@ -18,7 +18,7 @@
 #ifndef G_DEV_FDC_H
 #define G_DEV_FDC_H
 
-#define G_DEV_FLOPPY_DENSITY 2
+#define G_DEV_FLOPPY_DENSITY 1
 
 #define G_FDC_DOR_DMA_ENABLE	0x8
 #define G_FDC_DOR_MOTOR1	0x20

@@ -29,7 +29,7 @@ void g_world_init(struct v_world *, unsigned long);
 int g_do_int(struct v_world *, unsigned int);
 int g_do_io(struct v_world *, unsigned int, unsigned int, void *);
 
-#define G_DEV_FLOPPY_DENSITY 2
+#define G_DEV_FLOPPY_DENSITY 1
 #define G_CONFIG_MEM_PAGES 0x15000
 
 #define G_IO_IN 0

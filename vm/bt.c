@@ -193,6 +193,10 @@ v_add_poi(struct v_world *world, struct v_page *mpage, unsigned int addr,
     poi->pb_cache.total = 0;
     poi->pb_cache.replace = 0;
 #endif
+#ifdef V_POI_PB_CACHED_POI
+    poi->pb_cache_poi.total = 0;
+    poi->pb_cache_poi.replace = 0;
+#endif
     if (type & V_INST_PB)
         v_perf_inc(V_PERF_POI_PB, 1);
     if (type & V_INST_CB)

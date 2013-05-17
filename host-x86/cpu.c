@@ -558,6 +558,7 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
 #define GP_FAULT_QUICKPATH_HANDLER
 #endif
 
+#ifdef QUICKPATH_GP_ENABLED
 void
 h_gp_fault_quickpath_preamble(struct v_world *world)
 {
@@ -592,6 +593,7 @@ h_gp_fault_quickpath_postprocessing2(struct v_world *world)
         }
     }
 }
+#endif
 
 #ifdef QUICKPATH_GP_ENABLED
 #define GP_FAULT_QUICKPATH_PREAMBLE \
@@ -741,6 +743,42 @@ h_switcher(unsigned long trbase, struct v_world *w)
                 asm volatile ("iret");
             }
         }
+#ifdef V_POI_PB_CACHED_POI
+         else {
+            /* out of ss */
+            struct v_poi *temp;
+            unsigned int i;
+            /* todo: assuming flat mem */
+            for (i = 0; i < poi->pb_cache_poi.total; i++) {
+                temp = (struct v_poi *) monitor_access(mon_world, poi->pb_cache_poi.targets[i]);
+                if (temp->addr == mon_world->hregs.gcpu.eip) {
+/*                    monitor_log(mon_world, 'm');
+                    if (temp->type & V_INST_I) {
+                        while (temp != NULL && (temp->type & V_INST_I)) {
+                            monitor_log(mon_world, 'i');
+                            if (temp->next_inst == NULL) {
+                                temp = NULL;
+                                break;
+                            }
+                            temp = (struct v_poi *) monitor_access(mon_world, temp->next_inst);
+                        }
+                    }
+                    if (temp == NULL) {
+                        break;
+                    }
+*/
+
+
+                    if (temp->type & V_INST_CB) {
+                        monitor_log(mon_world, 'C');
+                    }
+                    if (temp->type & V_INST_PB) {
+                        monitor_log(mon_world, 'P');
+                    }
+                }
+            }
+        }
+#endif
     }
     h_addr_t tr = (h_addr_t) trbase;
     struct h_regs *h = &w->hregs;
@@ -3178,6 +3216,8 @@ h_do_fail_inst(struct v_world *w, unsigned long ip)
     h_gpfault(w);
 }
 
+#ifdef QUICKPATH_GP_ENABLED
+
 void
 h_gp_fault_quickpath_postprocessing(struct v_world *world)
 {
@@ -3206,6 +3246,7 @@ h_gp_fault_quickpath_postprocessing(struct v_world *world)
     }
 }
 
+#endif
 
 #define H_DO_INT(number) case number: asm volatile ("int $"#number); break
 static void
