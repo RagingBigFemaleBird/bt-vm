@@ -34,7 +34,7 @@ h_step_on(struct v_world *world)
 {
     V_VERBOSE("(Step ON)");
     world->hregs.gcpu.eflags |= (H_EFLAGS_TF | H_EFLAGS_RF);
-    world->hregs.gcpu.dr7 &= (0xffffff00);
+    world->hregs.gcpu.dr7 &= (0xff00);
     world->gregs.rf = 1;
 #ifdef BT_CACHE
     h_bt_squash_pb(world);
@@ -81,5 +81,5 @@ h_clear_bp(struct v_world *world, unsigned int bp_number)
 void
 h_bt_reset(struct v_world *world)
 {
-    world->hregs.gcpu.dr7 &= (0xffffff00);
+    world->hregs.gcpu.dr7 &= (0xff00);
 }

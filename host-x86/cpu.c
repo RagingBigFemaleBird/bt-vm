@@ -680,10 +680,12 @@ h_switcher(unsigned long trbase, struct v_world *w)
                 poi_new = mon_world->bp_to_poi[3];
             }
             process = 1;
+//            monitor_log(mon_world, 'b');
         }
 #ifdef V_POI_PB_CACHED_POI
         else {
             /* out of ss */
+//            monitor_log(mon_world, 's');
 
             /* todo: assuming flat mem */
             for (i = 0; i < poi->pb_cache_poi.total; i++) {
@@ -708,18 +710,23 @@ h_switcher(unsigned long trbase, struct v_world *w)
                         if (temp->type & V_INST_CB) {
                             poi_new = temp2;
                             process = 2;
+//                            monitor_log(mon_world, 'C');
                         }
                         if (temp->type & V_INST_PB) {
-                            if (temp2 == NULL) {
+//                            monitor_log(mon_world, 'P');
+                            if (mon_world->hregs.gcpu.eip != temp->addr) {
                                 poi_new = poi->pb_cache_poi.targets[i];
                                 process = 2;
+//                                monitor_log(mon_world, '2');
                             } else {
+                                temp->expect = 1;
                                 mon_world->poi = poi->pb_cache_poi.targets[i];
-                                temp->expect = 0;
                                 dr &= 0xffff0ff0;
                                 asm volatile ("mov %0, %%dr6"::"r" (dr));
-                                mon_world->hregs.gcpu.eflags &= (~H_EFLAGS_RF);
-                                mon_world->hregs.gcpu.dr7 &= (0xffffff00);
+                                mon_world->hregs.gcpu.eflags &=
+                                    (~(H_EFLAGS_RF | H_EFLAGS_TF));
+                                mon_world->hregs.gcpu.dr7 &= (0xff00);
+                                mon_world->hregs.gcpu.dr7 |= 0x703;
                                 mon_world->bp_to_poi[0] =
                                     poi->pb_cache_poi.targets[i];
                                 mon_world->current_valid_bps = 1;
@@ -727,7 +734,6 @@ h_switcher(unsigned long trbase, struct v_world *w)
                                 addr = temp->addr;
                                 mon_world->hregs.gcpu.dr0 = addr;
                                 asm volatile ("mov %0, %%dr0"::"r" (addr));
-                                mon_world->hregs.gcpu.dr7 |= 0x703;
                                 asm volatile ("mov %0, %%dr7"::
                                     "r" (mon_world->hregs.gcpu.dr7));
                                 asm volatile ("pop %es");
@@ -745,10 +751,10 @@ h_switcher(unsigned long trbase, struct v_world *w)
         if (process) {
             poi = (struct v_poi *) monitor_access(mon_world, poi_new);
             if ((poi->type & V_INST_U) || (poi->type & V_INST_PB)) {
-                mon_world->poi = poi_new;
                 poi->expect = 1;
+                mon_world->poi = poi_new;
                 mon_world->hregs.gcpu.eflags |= (H_EFLAGS_TF | H_EFLAGS_RF);
-                mon_world->hregs.gcpu.dr7 &= (0xffffff00);
+                mon_world->hregs.gcpu.dr7 &= (0xff00);
                 mon_world->gregs.rf = 1;
                 dr &= 0xffff0ff0;
                 asm volatile ("mov %0, %%dr6"::"r" (dr));
@@ -759,15 +765,16 @@ h_switcher(unsigned long trbase, struct v_world *w)
                 asm volatile ("iret");
             }
             if ((poi->type & V_INST_CB) && poi->plan.valid) {
-                mon_world->poi = poi_new;
                 poi->expect = 0;
+                mon_world->poi = poi_new;
                 dr &= 0xffff0ff0;
                 asm volatile ("mov %0, %%dr6"::"r" (dr));
-                mon_world->hregs.gcpu.eflags &= (~H_EFLAGS_RF);
-                mon_world->hregs.gcpu.dr7 &= (0xffffff00);
+                mon_world->hregs.gcpu.eflags &= (~(H_EFLAGS_RF | H_EFLAGS_TF));
+                mon_world->hregs.gcpu.dr7 &= (0xff00);
                 i = 0x703;
                 mon_world->bp_to_poi[0] = poi->plan.poi[0];
                 mon_world->current_valid_bps = 1;
+                mon_world->gregs.rf = 0;
                 poi_new =
                     (struct v_poi *) monitor_access(mon_world,
                     poi->plan.poi[0]);
