@@ -70,8 +70,10 @@ h_world_init(struct v_world *world)
         h_v2p((unsigned int) world->hregs.hcpu.switcher), 1,
         V_PAGE_W | V_PAGE_VM);
     V_ERR("neutral page at %p\n", world->hregs.hcpu.switcher);
-    V_ERR("Check map %llx -> %llx", (unsigned long long)((h_addr_t)(world->hregs.hcpu.switcher)),
-         (unsigned long long)h_get_map(world->htrbase, world->hregs.hcpu.switcher));
+    V_ERR("Check map %llx -> %llx",
+        (unsigned long long) ((h_addr_t) (world->hregs.hcpu.switcher)),
+        (unsigned long long) h_get_map(world->htrbase,
+            world->hregs.hcpu.switcher));
 
     world->hregs.gcpu.idt.base = (unsigned int) va;
     world->hregs.gcpu.idt.limit = 0x7ff;

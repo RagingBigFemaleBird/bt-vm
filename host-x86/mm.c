@@ -318,6 +318,7 @@ h_set_map(h_addr_t trbase, h_addr_t va, h_addr_t pa, h_addr_t pages, int attr)
         }
         l1v = h_allocv(*l0);
         l1 = l1v + h_pae_pt1_off(va);
+        V_LOG("map pae pages %p, %p, %llx, %llx", l0, l1v, *l0, *l1);
         if (h_pae_pt1_off(va) != h_pae_pt1_off(va - H_PAGE_SIZE)
             && pages >= (1 << 9)) {
             (*l1) = h_pae_pt1_format(pa, attr) | H_PAGE_PS;
@@ -336,8 +337,8 @@ h_set_map(h_addr_t trbase, h_addr_t va, h_addr_t pa, h_addr_t pages, int attr)
             h_clear_page(l2v);
             (*l1) = h_pae_pt1_format(c->phys, attr);
             (*l2) = h_pae_pt2_format(pa, attr);
-            V_LOG("mapping %llx to %llx, l1 = %llx, l2= %llx\n", va, pa, *l1,
-                *l2);
+            V_LOG("mapping %llx to %llx, (%p)l1 = %llx, (%p)l2= %llx\n", va, pa,
+                l1, *l1, l2, *l2);
             h_deallocv(c->phys);
         } else {
             void *l2v = h_allocv((*l1));

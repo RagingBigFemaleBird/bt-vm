@@ -68,7 +68,8 @@ v_page_make_present(struct v_page *mpage)
         else
             mpage->attr &= (~V_PAGE_NOTPRESENT);
         V_LOG("virt = %p, phys = %llx, mpage = %p (%x) (%x)", virt,
-            (unsigned long long)(v->phys), mpage, mpage->attr, (unsigned int) mpage->mfn);
+            (unsigned long long) (v->phys), mpage, mpage->attr,
+            (unsigned int) mpage->mfn);
         return virt;
     }
     virt = h_allocv(mpage->mfn << H_PAGE_SHIFT);

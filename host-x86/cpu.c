@@ -660,7 +660,8 @@ h_switcher(unsigned long trbase, struct v_world *w)
                 && world->host_pools[i].virt + world->host_pools[i].total_size >
                 (unsigned int) (ptr)) {
                 return (void *) ((unsigned int) (ptr) -
-                    world->host_pools[i].virt + world->host_pools[i].mon_virt);
+                    (unsigned int) (world->host_pools[i].virt) +
+                    (unsigned int) (world->host_pools[i].mon_virt));
             }
         }
         return NULL;
@@ -957,10 +958,19 @@ h_switcher(unsigned long trbase, struct v_world *w)
     asm volatile ("mov %ss, %ax");
     asm volatile ("mov %ax, %ds");
     asm volatile ("mov %ax, %es");
+
+    /* Very important: cr3 must be restored
+     *  before restoring host ESP. The host
+     *  cannot address the expression h->hcpu.cr3.
+     *  at this point the ESP is at &h->hcpu.edi
+     */
+    /* WARNING: hard coded const here: 56 = cr3 to edi */
+    asm volatile ("movl -56(%esp), %eax");
+    asm volatile ("movl %eax, %cr3");
+
     asm volatile ("popa");
     asm volatile ("pop %esp");
 
-    asm volatile ("movl %0, %%cr3"::"r" (h->hcpu.cr3));
 
     asm volatile ("lgdt (%0)"::"r" (&(h->hcpu.gdt)));
     asm volatile ("lidt (%0)"::"r" (&(h->hcpu.idt)));
