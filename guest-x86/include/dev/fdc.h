@@ -51,6 +51,7 @@
 #define G_FDC_CMD_ST3		0x04
 #define G_FDC_CMD_READ		0x06
 #define G_FDC_CMD_SEEK		0x0f
+#define G_FDC_CMD_WRITE		0x05
 
 #define G_FDC_DMA_CHANNEL       0x2
 

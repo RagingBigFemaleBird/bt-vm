@@ -25,7 +25,7 @@
 
 unsigned int
 g_dma_transfer(struct v_world *world, int channel, void *buffer,
-    unsigned int count)
+    unsigned int count, int dir)
 {
     struct g_dev_dma *dma_states = &world->gregs.dev.dma;
     struct v_page *mpage;
@@ -46,7 +46,11 @@ g_dma_transfer(struct v_world *world, int channel, void *buffer,
             v_page_make_present(mpage) +
             (dma_states->address[channel] & H_POFF_MASK);
         V_EVENT("dma from %p to %p len %x", buffer, virt, to_copy);
-        h_memcpy(virt, buffer, to_copy);
+        if (dir) {
+            h_memcpy(buffer, virt, to_copy);
+        } else {
+            h_memcpy(virt, buffer, to_copy);
+        }
         rem -= to_copy;
         dma_states->address[channel] += to_copy;
         buffer += to_copy;

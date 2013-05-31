@@ -31,6 +31,7 @@ struct g_dev_dma {
 };
 
 int g_dma_handle_io(struct v_world *, unsigned int, unsigned int, void *);
-unsigned int g_dma_transfer(struct v_world *, int, void *, unsigned int);
+unsigned int g_dma_transfer(struct v_world *, int, void *, unsigned int,
+    int dir);
 
 #endif

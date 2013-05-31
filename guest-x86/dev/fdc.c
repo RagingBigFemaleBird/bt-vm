@@ -49,7 +49,38 @@ g_fdc_run_cmd(struct v_world *world)
         fdc_states->rwstart +=
             g_dma_transfer(world, G_FDC_DMA_CHANNEL,
             &g_disk_data[fdc_states->rwstart * 512],
-            fdc_states->rwcount * 512) / 512;
+            fdc_states->rwcount * 512, 0) / 512;
+        V_EVENT("DMA transfer complete, logical block at %x",
+            fdc_states->rwstart);
+        fdc_states->in_expect_bytes = 7;
+        fdc_states->bytes[0] = G_FDC_ST0_SUCCESS;
+        fdc_states->bytes[1] = 0;
+        fdc_states->bytes[2] = 0;
+        fdc_states->bytes[3] = G_FDC_BLOCK_TO_C(fdc_states->rwstart);
+        fdc_states->bytes[4] = G_FDC_BLOCK_TO_H(fdc_states->rwstart);
+        fdc_states->bytes[5] = G_FDC_BLOCK_TO_S(fdc_states->rwstart);
+        fdc_states->bytes[6] = 2;
+        g_pic_trigger(world, G_PIC_FDC_INT);
+        break;
+    case G_FDC_CMD_WRITE:
+        V_EVENT("FDC write head %x cyl %x sec %x count %x",
+            fdc_states->bytes[2], fdc_states->bytes[1],
+            fdc_states->bytes[3], fdc_states->bytes[5]);
+        if ((fdc_states->bytes[0] >> 2) != fdc_states->bytes[2]
+            || fdc_states->bytes[4] != 2 || fdc_states->bytes[6] != 0x1b
+            || fdc_states->bytes[7] != 0xff) {
+            V_ALERT("FDC write sanity check failed, %x, %x, %x, %x",
+                fdc_states->bytes[0], fdc_states->bytes[4],
+                fdc_states->bytes[6], fdc_states->bytes[7]);
+        }
+        fdc_states->rwstart =
+            G_FDC_CHS_TO_BLOCK(fdc_states->bytes[1],
+            fdc_states->bytes[2], fdc_states->bytes[3]);
+        fdc_states->rwcount = fdc_states->bytes[5];
+        fdc_states->rwstart +=
+            g_dma_transfer(world, G_FDC_DMA_CHANNEL,
+            &g_disk_data[fdc_states->rwstart * 512],
+            fdc_states->rwcount * 512, 1) / 512;
         V_EVENT("DMA transfer complete, logical block at %x",
             fdc_states->rwstart);
         fdc_states->in_expect_bytes = 7;
