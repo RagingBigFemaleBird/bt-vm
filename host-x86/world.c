@@ -31,11 +31,6 @@ h_monitor_fault_check_fixup(struct v_world *world)
     int monitor_offset;
     int monitor_stack_offset;
     unsigned int h_switcher_page = (unsigned int) world->hregs.hcpu.switcher;
-    unsigned int cr0;
-    asm volatile ("movl %%cr0, %0":"=r" (cr0));
-    if (cr0 & H_CR0_WP) {
-        asm volatile ("movl %0, %%cr0"::"r" (cr0 & (~H_CR0_WP)));
-    }
     monitor_offset =
         (unsigned int) monitor_fault_entry_check - (unsigned int) h_switcher;
     monitor_stack_offset =
@@ -45,9 +40,6 @@ h_monitor_fault_check_fixup(struct v_world *world)
         monitor_stack_offset;
     *(unsigned int *) (h_switcher_page + monitor_offset + 6 + 2 + 1) =
         monitor_stack_offset - 8 * 4 - 12;
-    if (cr0 & H_CR0_WP) {
-        asm volatile ("movl %0, %%cr0"::"r" (cr0));
-    }
     V_ERR("fixing monitor stack check @%x to %x",
         h_switcher_page + monitor_offset, monitor_stack_offset);
 }
@@ -78,6 +70,8 @@ h_world_init(struct v_world *world)
         h_v2p((unsigned int) world->hregs.hcpu.switcher), 1,
         V_PAGE_W | V_PAGE_VM);
     V_ERR("neutral page at %p\n", world->hregs.hcpu.switcher);
+    V_ERR("Check map %llx -> %llx", (unsigned long long)((h_addr_t)(world->hregs.hcpu.switcher)),
+         (unsigned long long)h_get_map(world->htrbase, world->hregs.hcpu.switcher));
 
     world->hregs.gcpu.idt.base = (unsigned int) va;
     world->hregs.gcpu.idt.limit = 0x7ff;

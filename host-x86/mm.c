@@ -103,7 +103,7 @@ h_allocv(h_addr_t phys)
 void
 h_deallocv(h_addr_t phys)
 {
-    //kunmap(phys_to_page(phys));
+    kunmap(phys_to_page(phys));
 }
 
 void
@@ -261,7 +261,7 @@ h_pt2_format(h_addr_t pa, int attr)
 static unsigned long long
 h_pae_pdpte_format(h_addr_t pa, int attr)
 {
-    unsigned long long entry = (pa & 0xfffffffffffff000);
+    unsigned long long entry = (pa & H_PFN_MASK64);
     entry = entry | H_PAGE_P;
     return entry;
 }
@@ -269,7 +269,7 @@ h_pae_pdpte_format(h_addr_t pa, int attr)
 static unsigned long long
 h_pae_pt1_format(h_addr_t pa, int attr)
 {
-    unsigned long long entry = (pa & 0xfffffffffffff000);
+    unsigned long long entry = (pa & H_PFN_MASK64);
     entry = entry | H_PAGE_US;
     entry = entry | H_PAGE_RW;
     entry = entry | H_PAGE_P;
@@ -279,7 +279,7 @@ h_pae_pt1_format(h_addr_t pa, int attr)
 static unsigned long long
 h_pae_pt2_format(h_addr_t pa, int attr)
 {
-    unsigned long long entry = (pa & 0xfffffffffffff000);
+    unsigned long long entry = (pa & H_PFN_MASK64);
     unsigned long long priv = attr & V_PAGE_PRIV_MASK;
     if (priv == V_PAGE_USR || priv == V_PAGE_SYS)
         entry = entry | H_PAGE_US;
@@ -299,9 +299,11 @@ void
 h_set_map(h_addr_t trbase, h_addr_t va, h_addr_t pa, h_addr_t pages, int attr)
 {
     va = va & H_PFN_MASK;
+#ifdef H_MM_USE_PAE
+    pa = pa & H_PFN_MASK64;
+#else
     pa = pa & H_PFN_MASK;
-    /* va is 32 always bit */
-    va = va & 0xffffffff;
+#endif
     while (pages > 0) {
 #ifdef H_MM_USE_PAE
         void *tr = h_allocv(trbase);

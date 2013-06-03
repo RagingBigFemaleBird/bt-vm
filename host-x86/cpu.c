@@ -57,6 +57,7 @@ int
 h_cpu_init(void)
 {
     int wd_size = sizeof(struct v_world);
+    unsigned int cr0;
     V_ERR("World data size = %x", wd_size);
     if (wd_size > H_PAGE_SIZE) {
         V_ERR("Stop: world data size too large.");
@@ -87,6 +88,11 @@ h_cpu_init(void)
         V_ERR("Disabling global pages...");
         hostcpu.cr4 &= ~(H_CR4_PGE);
         asm volatile ("movl %0, %%cr4"::"r" (hostcpu.cr4));
+    }
+    asm volatile ("movl %%cr0, %0":"=r" (cr0));
+    if (cr0 & H_CR0_WP) {
+        V_ERR("Disabling WP...");
+        asm volatile ("movl %0, %%cr0"::"r" (cr0 & (~H_CR0_WP)));
     }
     V_LOG("TSC check, try 1: %llx", h_perf_tsc_read());
     V_LOG("TSC check, try 2: %llx", h_perf_tsc_read());

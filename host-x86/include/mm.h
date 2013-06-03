@@ -26,13 +26,14 @@
 #define H_PAGE_ALIGNED(x) ((x & H_PAGE_OFFSET ) == x)
 #define H_PFN_MASK 0xfffff000
 #define H_POFF_MASK 0xfff
+#define H_PFN_MASK64 0xfffffffffffff000
 
 #define H_PFN_NP	0xffffffff
 #define h_p2page(phys) ((phys) >> H_PAGE_SHIFT)
 
 #define H_MEM_POOL_DEFAULT_ORDER 10
 
-//#define H_MM_USE_PAE
+#define H_MM_USE_PAE
 #ifdef H_MM_USE_PAE
 typedef unsigned long long h_addr_t;
 #else
