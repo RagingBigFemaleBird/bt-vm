@@ -35,6 +35,7 @@ struct g_seed_table {
     void (*action2) (struct v_world *, unsigned char);
 };
 
+#if 0
 static char *reg_names[] =
     { "eax", "ecx", "edx", "ebx", "esp", "ebp", "esi", "edi" };
 static char *imm1_names[] =
@@ -45,6 +46,7 @@ static char *jcc_names[] =
     { "o", "no", "b", "ae", "e", "ne", "be", "a", "s", "ns", "p", "np", "l",
     "ge", "le", "g"
 };
+#endif
 
 static struct v_instruction *vi_current;
 struct g_seed_ws *pws_current;
@@ -158,7 +160,7 @@ g_seed_call(struct v_world *w, unsigned char byte)
     si_type = V_INST_UB | V_INST_FC;
     if (g_get_current_ex_mode(w) == G_EX_MODE_16) {
         unsigned int joff = 0;
-        int jmps;
+        int jmps = 0;
         joff += g_seed_nextbyte(w);
         joff += (g_seed_nextbyte(w) << 8);
         sb_target = w->gregs.sdisasm_ip + jmps;
@@ -957,7 +959,7 @@ g_seed_jcc(struct v_world *w, unsigned char byte)
     si_type = V_INST_CB;
     {
         unsigned int joff = 0;
-        int jmps;
+        int jmps = 0;
         joff += g_seed_nextbyte(w);
         sb_target = w->gregs.sdisasm_ip + jmps;
     }
@@ -1926,4 +1928,5 @@ g_seed_execute(struct v_world *world, void *pws)
 int
 g_seed_verify_context(struct v_world *world, void *pws)
 {
+    return 0;
 }

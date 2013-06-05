@@ -10,12 +10,13 @@ endif
 ifeq (${ARCH}, arm)
 #	ARM_KDIR := /km/kernel-herring/samsung-android-kernel
 #	ARM_KDIR := /km/kernel-ubuntu/ubuntu-precise
-#	C_OPTION += -C $(ARM_KDIR)
-	C_OPTION += -C /lib/modules/$(shell uname -r)/build
+	ARM_KDIR := /km/kernel-n4/msm
+	C_OPTION += -C $(ARM_KDIR)
+#	C_OPTION += -C /lib/modules/$(shell uname -r)/build
 	EXTRA_CFLAGS += -fno-pic -save-temps -Wall
 	EXTRA_CFLAGS += -I $(ARM_KDIR)/include/
 	SDIRS := $(PWD)
-#	C_OPTION += CROSS_COMPILE=/devtools/android-ndk-r8/toolchains/arm-linux-androideabi-4.4.3/prebuilt/linux-x86/bin/arm-linux-androideabi-
+	C_OPTION += CROSS_COMPILE=/km/cc/android-ndk-r8e/toolchains/arm-linux-androideabi-4.6/prebuilt/linux-x86/bin/arm-linux-androideabi-
 endif
 
 .PHONY: all clean

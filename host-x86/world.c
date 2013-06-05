@@ -73,7 +73,7 @@ h_world_init(struct v_world *world)
     V_ERR("Check map %llx -> %llx",
         (unsigned long long) ((h_addr_t) (world->hregs.hcpu.switcher)),
         (unsigned long long) h_get_map(world->htrbase,
-            world->hregs.hcpu.switcher));
+            (h_addr_t) (world->hregs.hcpu.switcher)));
 
     world->hregs.gcpu.idt.base = (unsigned int) va;
     world->hregs.gcpu.idt.limit = 0x7ff;

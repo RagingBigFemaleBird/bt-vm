@@ -99,66 +99,73 @@ run_tests(void)
     V_ERR("%x\n%x\n---\n", counter, counter1);
 }
 
+
 int
 h_cpu_init(void)
 {
+#ifdef BOARD_PANDA
     void *power;
+#endif
     asm volatile ("mrc p15 ,0 ,%0, c0, c0, 0":"=r" (hostcpu.p15_id));
-    V_LOG("main id: %x\n", hostcpu.p15_id);
+    V_ERR("main id: %x\n", hostcpu.p15_id);
     asm volatile ("mrc p15 ,0 ,%0, c1, c0, 0":"=r" (hostcpu.p15_ctrl));
-    V_LOG("control: %x\n", hostcpu.p15_ctrl);
+    V_ERR("control: %x\n", hostcpu.p15_ctrl);
     asm volatile ("mrc p15 ,0 ,%0, c2, c0, 1":"=r" (hostcpu.p15_trbase));
-    V_LOG("trbase: %x\n", hostcpu.p15_trbase);
+    V_ERR("trbase: %x\n", hostcpu.p15_trbase);
     asm volatile ("mrc p15 ,0 ,%0, c2, c0, 0":"=r" (hostcpu.p15_trbase));
-    V_LOG("trbase: %x\n", hostcpu.p15_trbase);
+    V_ERR("trbase: %x\n", hostcpu.p15_trbase);
     asm volatile ("mrc p15 ,0 ,%0, c2, c0, 2":"=r" (hostcpu.p15_trctl));
-    V_LOG("tr control: %x\n", hostcpu.p15_trctl);
+    V_ERR("tr control: %x\n", hostcpu.p15_trctl);
     asm volatile ("mrc p15 ,0 ,%0, c2, c0, 0":"=r" (hostcpu.p15_trattr));
     hostcpu.p15_trattr &= 0x3fff;
     hostcpu.p15_trbase &= 0xffffc000;
-    V_LOG("trattr: %x\n", hostcpu.p15_trattr);
+    V_ERR("trattr: %x\n", hostcpu.p15_trattr);
 
     hostcpu.domain = 0;
     asm volatile ("mrc p15, 0, %0, c12, c0, 0":"=r" (hostcpu.p15_vector));
-    V_LOG("Vector base: %x\n", hostcpu.p14_didr);
+    V_ERR("Vector base: %x\n", hostcpu.p14_didr);
 
+#ifdef BOARD_PANDA
     power = (void *) (0xb2000000 + 0x4a306000 + 0x1a00);
     V_LOG("Power state is %x\n", *(unsigned int *) power);
     *(unsigned int *) power = 2;
+#endif
     asm volatile ("mcr p14 ,0 ,%0, c1, c0, 4"::"r" (0));
     asm volatile ("isb");
 
     asm volatile ("mcr p14 ,0 ,%0, c0, c7, 0"::"r" (0));
     asm volatile ("isb");
     asm volatile ("mrc p14 ,0 ,%0, c0, c0, 0":"=r" (hostcpu.p14_didr));
-    V_LOG("DIDR: %x\n", hostcpu.p14_didr);
+    V_ERR("DIDR: %x\n", hostcpu.p14_didr);
     /* we take one breakpoint for single step purpose only */
     hostcpu.number_of_breakpoints = ((hostcpu.p14_didr & 0x0f000000) >> 24);
-    V_LOG("Number of breakpoints %x", hostcpu.number_of_breakpoints);
+    V_ERR("Number of breakpoints %x", hostcpu.number_of_breakpoints);
     asm volatile ("mrc p14 ,0 ,%0, c0, c1, 0":"=r" (hostcpu.p14_dscr));
-    V_LOG("DSCR: %x\n", hostcpu.p14_dscr);
+    V_ERR("DSCR: %x\n", hostcpu.p14_dscr);
     asm volatile ("mrc p14 ,0 ,%0, c1, c0, 0":"=r" (hostcpu.p14_drar));
-    V_LOG("DRAR: %x\n", hostcpu.p14_drar);
+    V_ERR("DRAR: %x\n", hostcpu.p14_drar);
     hostcpu.p14_drar &= 0xfffff000;
     asm volatile ("mrc p14 ,0 ,%0, c2, c0, 0":"=r" (hostcpu.p14_dsar));
-    V_LOG("DSAR: %x\n", hostcpu.p14_dsar);
+    V_ERR("DSAR: %x\n", hostcpu.p14_dsar);
     asm volatile ("mrc p14 ,0 ,%0, c0, c0, 5":"=r" (hostcpu.p14_dsar));
-    V_LOG("DBGBCR0: %x\n", hostcpu.p14_dsar);
+    V_ERR("DBGBCR0: %x\n", hostcpu.p14_dsar);
     asm volatile ("mrc p14 ,0 ,%0, c0, c1, 5":"=r" (hostcpu.p14_dsar));
-    V_LOG("DBGBCR1: %x\n", hostcpu.p14_dsar);
+    V_ERR("DBGBCR1: %x\n", hostcpu.p14_dsar);
     asm volatile ("mrc p14 ,0 ,%0, c0, c2, 5":"=r" (hostcpu.p14_dsar));
-    V_LOG("DBGBCR2: %x\n", hostcpu.p14_dsar);
+    V_ERR("DBGBCR2: %x\n", hostcpu.p14_dsar);
     asm volatile ("mrc p14 ,0 ,%0, c0, c3, 5":"=r" (hostcpu.p14_dsar));
-    V_LOG("DBGBCR3: %x\n", hostcpu.p14_dsar);
+    V_ERR("DBGBCR3: %x\n", hostcpu.p14_dsar);
     asm volatile ("mrc p14 ,0 ,%0, c0, c4, 5":"=r" (hostcpu.p14_dsar));
-    V_LOG("DBGBCR4: %x\n", hostcpu.p14_dsar);
+    V_ERR("DBGBCR4: %x\n", hostcpu.p14_dsar);
     asm volatile ("mrc p14 ,0 ,%0, c0, c5, 5":"=r" (hostcpu.p14_dsar));
-    V_LOG("DBGBCR5: %x\n", hostcpu.p14_dsar);
+    V_ERR("DBGBCR5: %x\n", hostcpu.p14_dsar);
 
+#ifdef BOARD_PANDA
     asm volatile ("mrc p14 ,0 ,%0, c1, c5, 4":"=r" (hostcpu.p14_dsar));
-    V_LOG("PowerState: %x\n", hostcpu.p14_dsar);
+    V_ERR("PowerState: %x\n", hostcpu.p14_dsar);
     asm volatile ("mrc p14 ,0 ,%0, c7, c14, 6":"=r" (hostcpu.p14_dsar));
-    V_LOG("DbgAuth: %x\n", hostcpu.p14_dsar);
+    V_ERR("DbgAuth: %x\n", hostcpu.p14_dsar);
+#endif
 
     asm volatile ("mcr p14 ,0 ,%0, c1, c0, 4"::"r" (0));
     asm volatile ("isb");
@@ -169,13 +176,13 @@ h_cpu_init(void)
     hostcpu.p14_dscr |= 0x8000;
     asm volatile ("mcr p14 ,0 ,%0, c0, c2, 2"::"r" (hostcpu.p14_dscr));
     asm volatile ("mcr p14 ,0 ,%0, c0, c2, 2"::"r" (hostcpu.p14_dscr));
-    V_LOG("Try to set DSCR to: %x\n", hostcpu.p14_dscr);
+    V_ERR("Try to set DSCR to: %x\n", hostcpu.p14_dscr);
     asm volatile ("mrc p14 ,0 ,%0, c0, c1, 0":"=r" (hostcpu.p14_dscr));
-    V_LOG("DSCR: %x\n", hostcpu.p14_dscr);
+    V_ERR("DSCR: %x\n", hostcpu.p14_dscr);
 #ifdef BT_CACHE
     cache_offset = ((void *) bt_cache_start) - ((void *) h_switcher);
 #endif
-    run_tests();
+    //run_tests();
     return 0;
 }
 

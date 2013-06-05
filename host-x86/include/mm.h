@@ -33,7 +33,7 @@
 
 #define H_MEM_POOL_DEFAULT_ORDER 10
 
-#define H_MM_USE_PAE
+//#define H_MM_USE_PAE
 #ifdef H_MM_USE_PAE
 typedef unsigned long long h_addr_t;
 #else
