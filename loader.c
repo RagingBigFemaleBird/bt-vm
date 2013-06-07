@@ -27,6 +27,7 @@
 #include <linux/fcntl.h>
 #include <linux/aio.h>
 #include <linux/cdev.h>
+#include <linux/vmalloc.h>
 #include <asm/uaccess.h>
 #include <linux/mm.h>
 #include <asm/pgtable.h>
@@ -130,7 +131,7 @@ procfile_write(struct file *file, const char *buffer, unsigned long count,
     if (require_initrd) {
         V_VERBOSE("Transferring initrd...");
         if (g_initrd_data == NULL) {
-            if ((g_initrd_data = kmalloc(0x1000000, 0)) == NULL)
+            if ((g_initrd_data = vmalloc(0x1000000)) == NULL)
                 return -EFAULT;
             tempBuffer = g_initrd_data;
         }
@@ -145,14 +146,14 @@ procfile_write(struct file *file, const char *buffer, unsigned long count,
 #endif
     V_VERBOSE("Transferring image...");
     if (g_disk_data == NULL) {
-        if ((g_disk_data = kmalloc(
+        if ((g_disk_data = vmalloc(
 #ifdef CONFIG_ARM
                     5000000
 #endif
 #ifdef CONFIG_X86
-                    512 * 2880 * 2      /*2.88M max */
+                    512 * 2880 * 7      /*2.88M max */
 #endif
-                    , 0)) == NULL)
+                    )) == NULL)
             return -EFAULT;
         tempBuffer = g_disk_data;
     }
@@ -274,6 +275,7 @@ struct vm_operations_struct btc_vm_ops = {
 
 extern unsigned int bpaddr;
 extern int usermode_tests_reset;
+extern unsigned int g_dev_floppy_density;
 
 #ifdef CONFIG_X86
 int
@@ -357,6 +359,8 @@ btc_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
     case BTC_UMOUNT:
         g_disk_data = NULL;
         g_disk_length = 0;
+        g_dev_floppy_density = 5;
+        g_fdc_eject(w_list);
         len = 0;
         ret = 0;
         usermode_tests_reset = 1;

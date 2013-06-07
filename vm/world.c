@@ -107,7 +107,7 @@ v_destroy_world(struct v_world *world)
 {
     int i;
     struct v_chunk chunk;
-    chunk.order = 1;
+    chunk.order = 0;
     chunk.phys = h_v2p((h_addr_t) world);
     for (i = 0; i < world->pages; i++) {
     }

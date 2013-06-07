@@ -29,6 +29,7 @@
 
 unsigned char *g_disk_data = NULL;
 unsigned long g_disk_length = 0;
+extern unsigned int g_dev_floppy_density;
 
 static int
 g_init_boot_sector(struct v_world *world, g_addr_t address)
@@ -370,7 +371,7 @@ g_do_io(struct v_world *world, unsigned int dir, unsigned int address,
         break;
     default:
       io_not_handled:
-        V_ALERT("unhandled IO %s port %x DATA=%x",
+        V_ERR("unhandled IO %s port %x DATA=%x",
             (dir == G_IO_IN) ? "in" : "out", address, *(unsigned char *) param);
     }
     return 0;
@@ -543,7 +544,7 @@ g_do_int(struct v_world *world, unsigned int param)
                 }
                 break;
             case 2:
-                if ((world->hregs.gcpu.ecx & 0xff) > 18 * G_DEV_FLOPPY_DENSITY) {       // linux way of probing disk geometry...
+                if ((world->hregs.gcpu.ecx & 0xff) > 18 * g_dev_floppy_density) {       // linux way of probing disk geometry...
                     world->hregs.gcpu.eflags |= H_EFLAGS_CF;
                     break;
                 }
@@ -553,9 +554,9 @@ g_do_int(struct v_world *world, unsigned int param)
                 drive = (world->hregs.gcpu.edx & 0xff);
                 block =
                     ((world->hregs.gcpu.ecx & 0xff00) >> 8) *
-                    36 * G_DEV_FLOPPY_DENSITY +
+                    36 * g_dev_floppy_density +
                     ((world->hregs.gcpu.edx & 0xff00) >> 8) *
-                    18 * G_DEV_FLOPPY_DENSITY + (world->hregs.gcpu.ecx & 0xff) -
+                    18 * g_dev_floppy_density + (world->hregs.gcpu.ecx & 0xff) -
                     1;
                 world->hregs.gcpu.eflags &= (~H_EFLAGS_CF);
                 while (to_read > 0) {

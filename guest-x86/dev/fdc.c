@@ -26,12 +26,26 @@
 
 extern unsigned char *g_disk_data;
 
+unsigned int g_dev_floppy_density = 2;
+
 static void
 g_fdc_run_cmd(struct v_world *world)
 {
     struct g_dev_fdc *fdc_states = &world->gregs.dev.fdc;
     switch (fdc_states->cmd) {
     case G_FDC_CMD_READ:
+        if (fdc_states->media_changed) {
+            fdc_states->in_expect_bytes = 7;
+            fdc_states->bytes[0] = G_FDC_ST0_SIGNAL;
+            fdc_states->bytes[1] = 0;
+            fdc_states->bytes[2] = 0;
+            fdc_states->bytes[3] = G_FDC_BLOCK_TO_C(fdc_states->rwstart);
+            fdc_states->bytes[4] = G_FDC_BLOCK_TO_H(fdc_states->rwstart);
+            fdc_states->bytes[5] = G_FDC_BLOCK_TO_S(fdc_states->rwstart);
+            fdc_states->bytes[6] = 2;
+            g_pic_trigger(world, G_PIC_FDC_INT);
+            break;
+        }
         V_EVENT("FDC read head %x cyl %x sec %x count %x",
             fdc_states->bytes[2], fdc_states->bytes[1],
             fdc_states->bytes[3], fdc_states->bytes[5]);
@@ -63,6 +77,18 @@ g_fdc_run_cmd(struct v_world *world)
         g_pic_trigger(world, G_PIC_FDC_INT);
         break;
     case G_FDC_CMD_WRITE:
+        if (fdc_states->media_changed) {
+            fdc_states->in_expect_bytes = 7;
+            fdc_states->bytes[0] = G_FDC_ST0_SIGNAL;
+            fdc_states->bytes[1] = 0;
+            fdc_states->bytes[2] = 0;
+            fdc_states->bytes[3] = G_FDC_BLOCK_TO_C(fdc_states->rwstart);
+            fdc_states->bytes[4] = G_FDC_BLOCK_TO_H(fdc_states->rwstart);
+            fdc_states->bytes[5] = G_FDC_BLOCK_TO_S(fdc_states->rwstart);
+            fdc_states->bytes[6] = 2;
+            g_pic_trigger(world, G_PIC_FDC_INT);
+            break;
+        }
         V_EVENT("FDC write head %x cyl %x sec %x count %x",
             fdc_states->bytes[2], fdc_states->bytes[1],
             fdc_states->bytes[3], fdc_states->bytes[5]);
@@ -119,6 +145,13 @@ g_fdc_run_cmd(struct v_world *world)
     }
 }
 
+void
+g_fdc_eject(struct v_world *world)
+{
+    struct g_dev_fdc *fdc_states = &world->gregs.dev.fdc;
+    fdc_states->media_changed = 1;
+}
+
 int
 g_fdc_handle_io(struct v_world *world, unsigned int dir, unsigned int address,
     void *param)
@@ -170,6 +203,10 @@ g_fdc_handle_io(struct v_world *world, unsigned int dir, unsigned int address,
         if (dir == G_IO_IN) {
             V_LOG("FDC DIR in");
             *data = 0;
+            if (fdc_states->media_changed) {
+                fdc_states->media_changed = 0;
+                *data |= G_FDC_DIR_CHANGE;
+            }
         } else if (dir == G_IO_OUT) {
             V_LOG("FDC DIR out %x", *data);
         }
@@ -245,7 +282,7 @@ g_fdc_handle_io(struct v_world *world, unsigned int dir, unsigned int address,
         break;
     default:
       io_not_handled:
-        V_ALERT("unhandled FDC IO %s port %x DATA=%x",
+        V_ERR("unhandled FDC IO %s port %x DATA=%x",
             (dir == G_IO_IN) ? "in" : "out", address, *(unsigned char *) param);
 
     }
