@@ -184,8 +184,8 @@ g_do_io(struct v_world *world, unsigned int dir, unsigned int address,
             world->gregs.dev.pic.d0icw_expect = 2;
         } else if (world->gregs.dev.pic.d0icw1 & G_PIC_OCW3) {
             world->gregs.dev.pic.d0in20 =
-                (world->gregs.dev.pic.d0icw1 & 1) ? world->gregs.dev.pic.
-                d0IRQ_req : world->gregs.dev.pic.d0IRQ_srv;
+                (world->gregs.dev.pic.d0icw1 & 1) ? world->gregs.dev.
+                pic.d0IRQ_req : world->gregs.dev.pic.d0IRQ_srv;
         } else {
             V_EVENT("ACK %x", world->gregs.dev.pic.d0icw1);
             world->gregs.dev.pic.d0IRQ_req ^= world->gregs.dev.pic.d0IRQ_srv;
@@ -286,12 +286,12 @@ g_do_io(struct v_world *world, unsigned int dir, unsigned int address,
         switch (world->gregs.dev.cmos.cmos_rtc_index) {
         case 0x0a:
             if (dir == G_IO_OUT)
-                world->gregs.dev.cmos.cmos_reg[world->gregs.dev.cmos.
-                    cmos_rtc_index] = *(unsigned char *) param;
+                world->gregs.dev.cmos.cmos_reg[world->gregs.dev.
+                    cmos.cmos_rtc_index] = *(unsigned char *) param;
             else if (dir == G_IO_IN) {
                 *(unsigned char *) param =
-                    world->gregs.dev.cmos.cmos_reg[world->gregs.dev.cmos.
-                    cmos_rtc_index];
+                    world->gregs.dev.cmos.cmos_reg[world->gregs.dev.
+                    cmos.cmos_rtc_index];
                 world->gregs.dev.cmos.cmos_reg[world->gregs.dev.cmos.cmos_rtc_index] ^= 0x80;   /* do alternating ready/not ready to fool linux init */
             } else
                 goto io_not_handled;

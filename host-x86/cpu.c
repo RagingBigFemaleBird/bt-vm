@@ -1822,7 +1822,7 @@ h_do_return(struct v_world *world, int para_count, int is_iret)
         if (ring > world->gregs.ring) {
 #ifdef DEBUG_CODECONTROL
             if (!(savedef & H_EFLAGS_IF)) {
-                V_ALERT("Sanity check failed, ring 1-3 has interrupt disabled");
+                V_ERR("Sanity check failed, ring 1-3 has interrupt disabled");
                 world->status = VM_PAUSED;
             }
 #endif
@@ -2689,6 +2689,31 @@ h_gpfault(struct v_world *world)
                 break;
             }
             goto undef_inst;
+            break;
+        } else if ((unsigned int) (*(inst + 1)) == 0xa2) {
+            unsigned int ret0, ret1, ret2, ret3;
+            unsigned int req0, req1;
+            req0 = world->hregs.gcpu.eax;
+            req1 = world->hregs.gcpu.ecx;
+            V_EVENT("CPUID with %x, %x", world->hregs.gcpu.eax,
+                world->hregs.gcpu.ecx);
+            asm volatile ("cpuid":"=a" (ret0), "=b"(ret1), "=c"(ret2),
+                "=d"(ret3):"0"(world->hregs.gcpu.eax),
+                "2"(world->hregs.gcpu.ecx):"memory");
+            if (req0 == 0x1) {
+                V_EVENT("CPU returns with %x, %x, %x, %x, require fixing", ret0,
+                    ret1, ret2, ret3);
+                ret2 &= ~(1 << 5);      //VMX
+                ret3 &= ~(1 << 9);      //On board APIC
+                ret3 &= ~(1 << 11);     //SEP
+                ret3 &= ~(1 << 16);     //PAT
+            }
+            V_EVENT("Returning with %x, %x, %x, %x", ret0, ret1, ret2, ret3);
+            world->hregs.gcpu.eax = ret0;
+            world->hregs.gcpu.ebx = ret1;
+            world->hregs.gcpu.ecx = ret2;
+            world->hregs.gcpu.edx = ret3;
+            world->hregs.gcpu.eip += 2;
             break;
         } else if ((unsigned int) (*(inst + 1)) == 0x20) {
             int reg = (unsigned int) (*(inst + 2)) & 0xf;

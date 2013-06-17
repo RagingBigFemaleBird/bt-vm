@@ -153,7 +153,7 @@ procfile_write(struct file *file, const char *buffer, unsigned long count,
 #ifdef CONFIG_X86
                     512 * 2880 * 7      /*2.88M max */
 #endif
-                    )) == NULL)
+                )) == NULL)
             return -EFAULT;
         tempBuffer = g_disk_data;
     }
@@ -357,6 +357,9 @@ btc_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
         break;
 
     case BTC_UMOUNT:
+        if (g_disk_data != NULL) {
+            vfree(g_disk_data);
+        }
         g_disk_data = NULL;
         g_disk_length = 0;
         g_dev_floppy_density = 5;
@@ -497,7 +500,7 @@ void
 cleanup_module(void)
 {
     v_destroy_world(w_list);
-    kfree(tempBuffer);
+    vfree(tempBuffer);
     remove_proc_entry(PROCFS_NAME, NULL);
     del_timer(&my_timer);
     cdev_del(&btc_device.cdev);

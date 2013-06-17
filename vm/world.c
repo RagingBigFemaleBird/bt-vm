@@ -105,14 +105,15 @@ v_create_world(unsigned long pages)
 void
 v_destroy_world(struct v_world *world)
 {
-    int i;
+/*    int i;
     struct v_chunk chunk;
     chunk.order = 0;
     chunk.phys = h_v2p((h_addr_t) world);
     for (i = 0; i < world->pages; i++) {
     }
+*/
     h_raw_dealloc(world->page_list);
-    h_raw_depalloc(&chunk);
+//    h_raw_depalloc(&chunk);
 }
 
 /**
