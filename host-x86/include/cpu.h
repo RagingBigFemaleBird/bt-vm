@@ -43,6 +43,7 @@
 #define H_CR4_PGE       (1 << 7)
 #define H_CR4_PAE       (1 << 5)
 #define H_CR4_PSE       (1 << 4)
+#define H_CR4_SMEP      (1 << 20)
 
 #define H_DR7_GE 	(1 << 9)
 #define H_DR7_LE	(1 << 8)
@@ -50,6 +51,10 @@
 #define H_DR7_ALLINST   (0)
 
 #define H_CR0_TS	(1 << 3)
+
+#define MSR_EFER        0xc0000080
+#define MSR_EFER_NX     (1 << 11)
+#define MSR_EFER_LME    (1 << 8)
 
 struct h_regs;
 struct v_world;
@@ -94,7 +99,7 @@ struct h_cpu {
     unsigned int cr3;
     unsigned int cr4;
 
-    unsigned int _mointor_stacks[8];
+    unsigned int _mointor_stacks[16];
 
     unsigned int gs;
     unsigned int fs;

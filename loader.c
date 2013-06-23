@@ -278,9 +278,14 @@ extern int usermode_tests_reset;
 extern unsigned int g_dev_floppy_density;
 
 #ifdef CONFIG_X86
+#ifdef HAVE_UNLOCKED_IOCTL
+long
+btc_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
+#else
 int
 btc_ioctl(struct inode *inode, struct file *filp,
     unsigned int cmd, unsigned long arg)
+#endif
 #endif
 #ifdef CONFIG_ARM
 long

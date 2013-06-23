@@ -58,6 +58,7 @@ h_cpu_init(void)
 {
     int wd_size = sizeof(struct v_world);
     unsigned int cr0;
+    unsigned int msr_l, msr_h;
     V_ERR("World data size = %x", wd_size);
     if (wd_size > H_PAGE_SIZE) {
         V_ERR("Stop: world data size too large.");
@@ -84,9 +85,19 @@ h_cpu_init(void)
             ("Unable to run under non PAE mode! Recompile with a different setting!");
 #endif
     }
+    asm volatile ("rdmsr":"=a" (msr_l), "=d"(msr_h):"c"(MSR_EFER));
+    if (msr_l & MSR_EFER_LME) {
+        V_ERR("Unable to run with LME!");
+        return 1;
+    }
     if (hostcpu.cr4 & H_CR4_PGE) {
         V_ERR("Disabling global pages...");
         hostcpu.cr4 &= ~(H_CR4_PGE);
+        asm volatile ("movl %0, %%cr4"::"r" (hostcpu.cr4));
+    }
+    if (hostcpu.cr4 & H_CR4_SMEP) {
+        V_ERR("Disabling SMEP...");
+        hostcpu.cr4 &= ~(H_CR4_SMEP);
         asm volatile ("movl %0, %%cr4"::"r" (hostcpu.cr4));
     }
     asm volatile ("movl %%cr0, %0":"=r" (cr0));
@@ -136,6 +147,7 @@ h_cpu_save(struct v_world *w)
     asm volatile ("pop %0":"=r" (h->hcpu.ss));
     asm volatile ("pushf");
     asm volatile ("pop %0":"=r" (h->hcpu.eflags));
+    asm volatile ("movl %%dr7, %0":"=r" (h->hcpu.dr7));
 /*    if (!bp_reached)
         h_set_bp(w, bpaddr, 3);*/
 }
@@ -965,7 +977,7 @@ h_switcher(unsigned long trbase, struct v_world *w)
      *  at this point the ESP is at &h->hcpu.edi
      */
     /* WARNING: hard coded const here: 56 = cr3 to edi */
-    asm volatile ("movl -56(%esp), %eax");
+    asm volatile ("movl -88(%esp), %eax");
     asm volatile ("movl %eax, %cr3");
 
     asm volatile ("popa");
@@ -1056,6 +1068,9 @@ h_switch_to(unsigned long trbase, struct v_world *w)
     V_LOG("Using switcher %p", h->hcpu.switcher);
 
     h->hcpu.switcher(trbase, w);
+
+    asm volatile ("movl %0, %%dr7"::"r" (h->hcpu.dr7));
+    asm volatile ("movl %0, %%cr0"::"r" (h->hcpu.cr0));
 
     h->gcpu.ds = h->gcpu.ds & 0xffff;
     if ((h->gcpu.fs & 0xffff0000) != 0 || (h->gcpu.es & 0xffff0000) != 0

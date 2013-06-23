@@ -25,6 +25,7 @@
 #include "vm/include/world.h"
 #include "vm/include/logging.h"
 #include "host/include/cpu.h"
+#include <linux/syscalls.h>
 
 #define phys_to_page(phys)    (pfn_to_page((phys) >> PAGE_SHIFT))
 
@@ -451,6 +452,11 @@ h_get_map(h_addr_t trbase, h_addr_t virt)
     h_deallocv(trbase);
     return ret;
 #endif
+}
+
+void
+h_virt_make_executable(h_addr_t addr, unsigned long size)
+{
 }
 
 void

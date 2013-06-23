@@ -33,7 +33,9 @@
 
 #define H_MEM_POOL_DEFAULT_ORDER 10
 
-//#define H_MM_USE_PAE
+#ifdef CONFIG_X86_PAE
+#define H_MM_USE_PAE
+#endif
 #ifdef H_MM_USE_PAE
 typedef unsigned long long h_addr_t;
 #else
@@ -89,4 +91,5 @@ int h_read_guest(struct v_world *, h_addr_t, unsigned int *);
 int h_write_guest(struct v_world *, h_addr_t, unsigned int);
 h_addr_t h_monitor_search_big_pages(struct v_world *, unsigned int, h_addr_t);
 void h_monitor_setup_data_pages(struct v_world *, h_addr_t);
+void h_virt_make_executable(h_addr_t, unsigned long);
 #endif
