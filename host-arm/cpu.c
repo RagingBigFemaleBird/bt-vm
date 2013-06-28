@@ -28,6 +28,7 @@
 #include "host/include/bt.h"
 #include "vm/include/perf.h"
 #include "host/include/perf.h"
+#include "vm/include/world.h"
 #include <../arch/arm/include/asm/cacheflush.h>
 
 extern volatile int step;
@@ -125,16 +126,22 @@ h_cpu_init(void)
     asm volatile ("mrc p15, 0, %0, c12, c0, 0":"=r" (hostcpu.p15_vector));
     V_ERR("Vector base: %x\n", hostcpu.p14_didr);
 
+    asm volatile ("mcr p14 ,0 ,%0, c1, c3, 4"::"r" (0));
+    asm volatile ("isb");
+
+    asm volatile ("mcr p14 ,0 ,%0, c1, c0, 4"::"r" (0xC5ACCE55));
+    asm volatile ("isb");
+
 #ifdef BOARD_PANDA
     power = (void *) (0xb2000000 + 0x4a306000 + 0x1a00);
     V_LOG("Power state is %x\n", *(unsigned int *) power);
     *(unsigned int *) power = 2;
-#endif
     asm volatile ("mcr p14 ,0 ,%0, c1, c0, 4"::"r" (0));
     asm volatile ("isb");
 
     asm volatile ("mcr p14 ,0 ,%0, c0, c7, 0"::"r" (0));
     asm volatile ("isb");
+#endif
     asm volatile ("mrc p14 ,0 ,%0, c0, c0, 0":"=r" (hostcpu.p14_didr));
     V_ERR("DIDR: %x\n", hostcpu.p14_didr);
     /* we take one breakpoint for single step purpose only */
@@ -165,13 +172,13 @@ h_cpu_init(void)
     V_ERR("PowerState: %x\n", hostcpu.p14_dsar);
     asm volatile ("mrc p14 ,0 ,%0, c7, c14, 6":"=r" (hostcpu.p14_dsar));
     V_ERR("DbgAuth: %x\n", hostcpu.p14_dsar);
-#endif
 
     asm volatile ("mcr p14 ,0 ,%0, c1, c0, 4"::"r" (0));
     asm volatile ("isb");
 
     asm volatile ("mcr p14 ,0 ,%0, c0, c7, 0"::"r" (0));
     asm volatile ("isb");
+#endif
 
     hostcpu.p14_dscr |= 0x8000;
     asm volatile ("mcr p14 ,0 ,%0, c0, c2, 2"::"r" (hostcpu.p14_dscr));
@@ -524,7 +531,7 @@ h_bt_cache(struct v_world *world, struct v_poi_cached_tree_plan *plan,
     asm volatile ("32:"); \
     asm volatile ("b 9b");
 #else
-#define CACHE_BT_REGION(function_no, cache_capacity)
+#define CACHE_BT_REGION(function_no)
 #endif
 
 

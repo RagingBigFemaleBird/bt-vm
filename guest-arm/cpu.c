@@ -18,6 +18,7 @@
 #include "guest/include/mm.h"
 #include "guest/include/cpu.h"
 #include "vm/include/logging.h"
+#include "vm/include/world.h"
 
 unsigned long
 g_get_ip(struct v_world *w)

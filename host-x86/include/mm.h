@@ -16,8 +16,8 @@
  *   along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 /* memory definitions and allocator */
-#ifndef _H_MM_H
-#define _H_MM_H
+#ifndef H_MM_H
+#define H_MM_H
 #include "guest/include/mm.h"
 
 #define H_TRBASE_ORDER 0

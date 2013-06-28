@@ -976,7 +976,7 @@ h_switcher(unsigned long trbase, struct v_world *w)
      *  cannot address the expression h->hcpu.cr3.
      *  at this point the ESP is at &h->hcpu.edi
      */
-    /* WARNING: hard coded const here: 56 = cr3 to edi */
+    /* WARNING: hard coded const here: 88 = cr3 to edi */
     asm volatile ("movl -88(%esp), %eax");
     asm volatile ("movl %eax, %cr3");
 

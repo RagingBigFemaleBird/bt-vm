@@ -32,12 +32,6 @@
 #include <asm/tlbflush.h>
 #include <../arch/arm/include/asm/cacheflush.h>
 
-void
-h_memcpy(void *dst, void *src, int size)
-{
-    memcpy(dst, src, size);
-}
-
 void *
 h_raw_malloc(unsigned long size)
 {
@@ -264,16 +258,18 @@ h_v2p(unsigned int virt)
 }
 
 void
-h_clear_page(unsigned long va)
+h_clear_page(void *vp)
 {
+    unsigned int va = (unsigned int) vp;
     va = va & H_PFN_MASK;
     memset((void *) va, 0, H_PAGE_SIZE);
     clean_dcache_area((void *) (va), H_PAGE_SIZE);
 }
 
 void
-h_clear_pagetable(unsigned long va)
+h_clear_pagetable(void *vp)
 {
+    unsigned int va = (unsigned int) vp;
     va = va & H_PFN_MASK;
     memset((void *) va, 0, H_PT_SIZE);
     clean_dcache_area((void *) (va), H_PT_SIZE);
@@ -329,7 +325,7 @@ h_set_map(unsigned long trbase, unsigned long va, unsigned long pa,
         if ((*(l1 - subpage) & H_PAGE_L1P) == 0) {
             struct v_chunk *c = h_raw_palloc(0);
             void *l2v = h_allocv(c->phys);
-            h_clear_page((unsigned int) l2v);
+            h_clear_page(l2v);
             (*(l1 - subpage)) = h_pt1_format(c->phys, attr);
             h_dcache_clean((unsigned int) (l1 - subpage));
             h_deallocv_virt((unsigned int) l2v);
@@ -338,7 +334,7 @@ h_set_map(unsigned long trbase, unsigned long va, unsigned long pa,
             unsigned int phys_big = (*(l1 - subpage)) & H_PFN_MASK;
             void *l2v = h_allocv(phys_big) + (subpage << 10);
             unsigned int *l2 = l2v + h_pt2_off(va);
-            h_clear_pagetable((unsigned int) l2v);
+            h_clear_pagetable(l2v);
             (*l1) = h_pt1_format(phys_big + (subpage << 10), attr);
             (*l2) = h_pt2_format(pa, attr);
             V_LOG("mapping %lx to %lx, %p|l1 = %x, %p|l2= %x\n", va,
@@ -482,7 +478,7 @@ h_inv_pagetable(struct v_world *world, struct v_spt_info *spt,
                 h_raw_depalloc(&v);
             }
         }
-        h_clear_page((long int) htrv);
+        h_clear_page(htrv);
         h_deallocv(spt->spt_paddr + i * H_PAGE_SIZE);
     }
     h_set_map(spt->spt_paddr, (long unsigned int) world,
@@ -538,7 +534,7 @@ h_new_trbase(struct v_world *world)
         V_EVENT("new base: %x from %x", world->htrbase, p15);
         for (i = 0; i < (1 << H_TRBASE_ORDER); i++) {
             htrv = h_allocv(world->htrbase + i * H_PAGE_SIZE);
-            h_clear_page((long int) htrv);
+            h_clear_page(htrv);
             h_deallocv(world->htrbase + i * H_PAGE_SIZE);
         }
         h_set_map(world->htrbase, (long unsigned int) world,
@@ -554,4 +550,34 @@ h_new_trbase(struct v_world *world)
         h_inv_spt(world, spt);
     }
 
+}
+
+void
+h_monitor_setup_data_pages(struct v_world *world, h_addr_t sptbase)
+{
+/*    struct v_spt_info *spt;
+    int i;
+    if ((spt = v_spt_get_by_spt(world, sptbase)) == NULL) {
+        V_ERR("Cannot setup monitor pages. SPT bug?");
+        return;
+    }
+    for (i = 0; i < world->pool_count; i++) {
+        if (world->host_pools[i].mon_virt == 0) {
+            world->host_pools[i].mon_virt =
+                h_monitor_search_big_pages(world, sptbase,
+                world->host_pools[i].total_size);
+            if (world->host_pools[i].mon_virt == 0) {
+                V_ERR("Cannot find suitable mapping @ guest world");
+                return;
+            }
+        }
+        if (spt->mem_pool_mapped[i] == 0) {
+            spt->mem_pool_mapped[i] = 1;
+            h_set_map(sptbase, world->host_pools[i].mon_virt,
+                world->host_pools[i].phys,
+                world->host_pools[i].total_size / H_PAGE_SIZE,
+                V_PAGE_W | V_PAGE_VM);
+        }
+    }
+*/
 }

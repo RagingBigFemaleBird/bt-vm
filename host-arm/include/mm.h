@@ -16,9 +16,8 @@
  *   along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 /* memory definitions and allocator */
-#ifndef _H_MM_H
-#define _H_MM_H
-#include "vm/include/world.h"
+#ifndef H_MM_H
+#define H_MM_H
 #include <../arch/arm/include/asm/page.h>
 #include <asm-generic/memory_model.h>
 
@@ -33,6 +32,10 @@
 #define H_PFN_NP	0xffffffff
 #define h_p2page(phys) ((phys) >> H_PAGE_SHIFT)
 
+#define H_MEM_POOL_DEFAULT_ORDER 10
+
+struct v_world;
+
 typedef unsigned int h_addr_t;
 
 struct v_chunk;
@@ -41,9 +44,11 @@ struct h_chunk {
     struct page *p;
 };
 
+#define h_memcpy(dst, src, size) memcpy((dst), (src), (size))
+#define h_memset(dst, src, size) memset((dst), (src), (size))
+
 unsigned int h_v2p(unsigned int);
 
-void h_memcpy(void *, void *, int);
 /* host raw memory allocator, returns virtual address, NULL if failed */
 void *h_raw_malloc(unsigned long size);
 void h_raw_dealloc(void *addr);
@@ -67,7 +72,7 @@ void h_set_p2m(struct v_world *, h_addr_t, unsigned long, h_addr_t);
 /* set mapping specified by translation base, va, pa, attr */
 void h_set_map(unsigned long, unsigned long, unsigned long, unsigned long, int);
 
-void h_clear_page(unsigned long);
+void h_clear_page(void *);
 
 void h_pin(unsigned long);
 
@@ -80,4 +85,9 @@ void h_fault_bridge_pages(struct v_world *, unsigned long);
 void h_delete_trbase(struct v_world *);
 void h_new_trbase(struct v_world *);
 void h_inv_pagetables(struct v_world *, unsigned int);
+
+h_addr_t h_monitor_search_big_pages(struct v_world *, unsigned int, h_addr_t);
+void h_monitor_setup_data_pages(struct v_world *, h_addr_t);
+void h_virt_make_executable(h_addr_t, unsigned long);
+
 #endif

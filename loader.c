@@ -365,6 +365,7 @@ btc_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
         if (g_disk_data != NULL) {
             vfree(g_disk_data);
         }
+#ifdef CONFIG_X86
         g_disk_data = NULL;
         g_disk_length = 0;
         g_dev_floppy_density = 5;
@@ -372,6 +373,7 @@ btc_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
         len = 0;
         ret = 0;
         usermode_tests_reset = 1;
+#endif
         break;
 
     default:
@@ -421,7 +423,7 @@ struct file_operations btc_fops = {
     .open = btc_open,
     .release = btc_release,
 #ifdef CONFIG_X86
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,7,0)
+#ifdef HAVE_UNLOCKED_IOCTL
     .unlocked_ioctl = btc_ioctl,
 #else
     .ioctl = btc_ioctl,

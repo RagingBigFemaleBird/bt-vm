@@ -19,6 +19,7 @@
 #include "guest/include/cpu.h"
 #include "vm/include/mm.h"
 #include "vm/include/logging.h"
+#include "vm/include/world.h"
 
 #define g_pt1_off(va) (((va) >> 20) << 2)
 #define g_pt2_off(va) ((((va) << 12) >> 24) << 2)

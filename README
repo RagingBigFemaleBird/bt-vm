@@ -13,7 +13,7 @@ To run,
 	insmod btc.ko
 	cat your_image_file > /proc/btc
         mknod /dev/btc0 c your_device_number 0
-	./vm-term /dev/btc0 0 16384
+	./vm-term /dev/btc0 0 32768
 
 vm-term is the ncurse client to observe virtual machine output.
 when vm-term is running:

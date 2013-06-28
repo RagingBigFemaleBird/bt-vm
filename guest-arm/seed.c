@@ -22,6 +22,7 @@
 #include "vm/include/mm.h"
 #include "vm/include/logging.h"
 #include "guest/include/seed.h"
+#include "vm/include/world.h"
 
 #define SEE_DEBUG(args...)
 // V_ERR(args)

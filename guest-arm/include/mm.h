@@ -17,11 +17,13 @@
  */
 #ifndef G_MM_H
 #define G_MM_H
-#include "vm/include/world.h"
 
 #define G_PA_BASE 0x00000000
 #define G_SERIAL_BASE 0x100b8000
 #define G_SERIAL_PAGE 0x101f1000
+
+struct v_world;
+
 typedef unsigned int g_addr_t;
 
 unsigned long g_v2p(struct v_world *, unsigned long, unsigned int);

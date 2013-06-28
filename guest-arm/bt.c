@@ -20,6 +20,7 @@
 #include "host/include/mm.h"
 #include "vm/include/mm.h"
 #include "vm/include/logging.h"
+#include "vm/include/world.h"
 
 struct g_inst_match {
     unsigned int mask;

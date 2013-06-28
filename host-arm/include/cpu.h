@@ -17,7 +17,8 @@
  */
 #ifndef H_CPU_H
 #define H_CPU_H
-#include "vm/include/world.h"
+
+struct v_world;
 
 #define H_EXD_CAPABLE 0
 
