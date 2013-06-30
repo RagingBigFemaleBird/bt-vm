@@ -46,9 +46,9 @@ struct v_world {
     unsigned int pages;
     int (*npage) (unsigned long, struct v_world *);
     unsigned long pa_top;
-
+    unsigned long long last_tsc;
+    unsigned long long total_tsc;
     unsigned int int_enable;
-
     unsigned long htrbase;
     struct v_poi *poi;
     int find_poi;

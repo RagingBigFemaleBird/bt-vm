@@ -24,8 +24,6 @@
 #include "guest/include/dev/pic.h"
 #include "host/include/perf.h"
 
-unsigned long long expected_jiffies = 0;
-
 void
 g_pic_init(struct v_world *w)
 {
@@ -64,7 +62,7 @@ g_pic_serve(struct v_world *w)
         h_inject_int(w, w->gregs.dev.pic.d0IRQ + G_PIC_FDC_INT);
         return;
     }
-    if (w->gregs.dev.pic.expected_jiffies + 0x2000000LL > h_perf_tsc_read()) {
+    if (w->gregs.dev.pic.expected_jiffies + 0x2000000LL > w->total_tsc) {
         return;
     }
     w->status = VM_RUNNING;

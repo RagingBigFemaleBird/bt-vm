@@ -1055,6 +1055,7 @@ int
 h_switch_to(unsigned long trbase, struct v_world *w)
 {
     struct h_regs *h = &w->hregs;
+    unsigned long long tsc;
     if (w->status == VM_IDLE) {
         if (!(h->gcpu.eflags & H_EFLAGS_TF))
             g_pic_serve(w);
@@ -1067,10 +1068,14 @@ h_switch_to(unsigned long trbase, struct v_world *w)
 
     V_LOG("Using switcher %p", h->hcpu.switcher);
 
+    w->last_tsc = h_perf_tsc_read();
     h->hcpu.switcher(trbase, w);
 
     asm volatile ("movl %0, %%dr7"::"r" (h->hcpu.dr7));
     asm volatile ("movl %0, %%cr0"::"r" (h->hcpu.cr0));
+    tsc = h_perf_tsc_read();
+    w->total_tsc += tsc - w->last_tsc;
+    w->last_tsc = tsc;
 
     h->gcpu.ds = h->gcpu.ds & 0xffff;
     if ((h->gcpu.fs & 0xffff0000) != 0 || (h->gcpu.es & 0xffff0000) != 0

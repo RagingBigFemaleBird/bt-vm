@@ -151,7 +151,7 @@ procfile_write(struct file *file, const char *buffer, unsigned long count,
                     5000000
 #endif
 #ifdef CONFIG_X86
-                    512 * 2880 * 7      /*2.88M max */
+                    512 * 2 * 254 * 254      /*max size*/
 #endif
                 )) == NULL)
             return -EFAULT;

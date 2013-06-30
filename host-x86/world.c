@@ -167,7 +167,7 @@ h_world_init(struct v_world *world)
     world->hregs.gcpu.dr7 = 0x700;
 
     world->hregs.hcpu.switcher = h_switcher;
-
+    world->total_tsc = world->last_tsc = 0;
     table = h_raw_palloc(0);
     world->hregs.fpu = h_allocv(table->phys);
     asm volatile ("fxsave (%0)"::"r" (world->hregs.fpu + 512));
@@ -196,7 +196,7 @@ h_relocate_npage(struct v_world *w)
     void *virt = h_allocv(phys);
     h_memcpy(virt, w->hregs.hcpu.switcher, 4096);
     w->hregs.hcpu.switcher = virt;
-    h_virt_make_executable(virt, H_PAGE_SIZE);
+    h_virt_make_executable((h_addr_t)virt, H_PAGE_SIZE);
 
     h_monitor_fault_check_fixup(w);
 
