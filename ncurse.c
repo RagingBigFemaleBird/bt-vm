@@ -51,7 +51,8 @@ int step = 0;
 #define BTC_BP  _IOW(BTC_IOC_MAGIC, 3, unsigned int)
 #define BTC_KEYIN _IOW(BTC_IOC_MAGIC, 4, unsigned int)
 #define BTC_UMOUNT _IOW(BTC_IOC_MAGIC, 5, unsigned int)
-#define BTC_IOC_MAXNR 5
+#define BTC_RUN _IOW(BTC_IOC_MAGIC, 6, unsigned int)
+#define BTC_IOC_MAXNR 6
 
 void
 menu(void)
@@ -108,29 +109,36 @@ do_keys(void)
     struct itimerval tout_val;
     int i, j;
     int c;
+    int updated = 1;
 
     while (1) {
-        counter++;
-        for (i = start_line; i < 200; i++) {
-            for (j = 0; j < 80; j++) {
-                if (i - start_line < row && j < col) {
-                    unsigned char bg = ((unsigned char *)
-                        address)[(i * 80 + j) * 2 + 1];
-                    //init_pair(1, bg >> 8, bg & 0xf);
-                    unsigned char fg = ((unsigned char *)
-                        address)[(i * 80 + j) * 2];
-                    if (fg == 0) {
-                        fg = ' ';       // so that it displays
+        if (updated) {
+            counter++;
+            for (i = start_line; i < 200; i++) {
+                for (j = 0; j < 80; j++) {
+                    if (i - start_line < row && j < col) {
+                        unsigned char bg = ((unsigned char *)
+                            address)[(i * 80 + j) * 2 + 1];
+                        //init_pair(1, bg >> 8, bg & 0xf);
+                        unsigned char fg = ((unsigned char *)
+                            address)[(i * 80 + j) * 2];
+                        if (fg == 0) {
+                            fg = ' ';       // so that it displays
+                        }
+                        mvprintw(i - start_line, j, "%c", fg);
                     }
-                    mvprintw(i - start_line, j, "%c", fg);
                 }
             }
-        }
-        mvprintw(row / 2, 40, "%d", counter);
-        timeout(1000);
+            refresh();
+       }
+//        mvprintw(row / 2, 40, "%d", counter);
+//        timeout(1000);
+        updated = ioctl(fileno(f), BTC_RUN, 0);
         noecho();
+        nodelay(stdscr, TRUE);
         keypad(stdscr, TRUE);
         c = getch();
+        if (c == ERR) continue;
         switch (c) {
         case KEY_HOME:
             if (start_line > 0);
@@ -148,7 +156,6 @@ do_keys(void)
             ioctl(fileno(f), BTC_KEYIN, c);
             break;
         }
-        refresh();
     }
 }
 

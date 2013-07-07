@@ -53,13 +53,23 @@
 #define BTC_BP  _IOW(BTC_IOC_MAGIC, 3, unsigned int)
 #define BTC_KEYIN _IOW(BTC_IOC_MAGIC, 4, unsigned int)
 #define BTC_UMOUNT _IOW(BTC_IOC_MAGIC, 5, unsigned int)
-#define BTC_IOC_MAXNR 5
+#define BTC_RUN _IOW(BTC_IOC_MAGIC, 6, unsigned int)
+#define BTC_IOC_MAXNR 6
 
 static struct v_world *w_list;
+/*
 static struct timer_list my_timer;
-static struct proc_dir_entry *Our_Proc_File;
+static struct workqueue_struct *btc_wq;
+*/
+static struct proc_dir_entry *btc_proc_file;
 volatile int step = 0;
 volatile int v_relocate = 0;
+int stepping = 0;
+volatile unsigned int time_up = 0;
+
+void btc_work_func(struct work_struct *);
+static DECLARE_DELAYED_WORK(btc_task, btc_work_func);
+spinlock_t e_lock;
 
 int poke = 0;
 
@@ -168,13 +178,6 @@ procfile_write(struct file *file, const char *buffer, unsigned long count,
     return count;
 }
 
-int stepping = 0;
-volatile unsigned int time_up = 0;
-static struct workqueue_struct *btc_wq;
-void btc_work_func(struct work_struct *);
-static DECLARE_DELAYED_WORK(btc_task, btc_work_func);
-spinlock_t e_lock;
-
 void
 btc_work_func(struct work_struct *work)
 {
@@ -214,6 +217,7 @@ btc_work_func(struct work_struct *work)
     spin_unlock_irqrestore(&e_lock, flags);
 }
 
+/*
 static void
 my_timer_func(unsigned long ptr)
 {
@@ -221,6 +225,7 @@ my_timer_func(unsigned long ptr)
     my_timer.expires = jiffies + 1;
     add_timer(&my_timer);
 }
+*/
 
 struct btc_dev {
     struct v_world *w;          /*world info */
@@ -361,6 +366,11 @@ btc_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
         ret = 0;
         break;
 
+    case BTC_RUN:
+        btc_work_func(NULL);
+        ret = 1;
+        break;
+
     case BTC_UMOUNT:
         if (g_disk_data != NULL) {
             vfree(g_disk_data);
@@ -464,24 +474,25 @@ init_module(void)
 
     V_EVENT("Initializing...\n");
 
+/*
     btc_wq = create_workqueue("btc");
-
+*/
     if (h_cpu_init())
         return -EIO;
 
-    Our_Proc_File = create_proc_entry(PROCFS_NAME, 0644, NULL);
+    btc_proc_file = create_proc_entry(PROCFS_NAME, 0644, NULL);
 
-    if (Our_Proc_File == NULL) {
+    if (btc_proc_file == NULL) {
         V_ERR("Error: Could not initialize /proc/%s\n", PROCFS_NAME);
         return -ENOMEM;
     }
 
-    Our_Proc_File->read_proc = procfile_read;
-    Our_Proc_File->write_proc = procfile_write;
-    Our_Proc_File->mode = S_IFREG | S_IRUGO;
-    Our_Proc_File->uid = 0;
-    Our_Proc_File->gid = 0;
-    Our_Proc_File->size = 37;
+    btc_proc_file->read_proc = procfile_read;
+    btc_proc_file->write_proc = procfile_write;
+    btc_proc_file->mode = S_IFREG | S_IRUGO;
+    btc_proc_file->uid = 0;
+    btc_proc_file->gid = 0;
+    btc_proc_file->size = 37;
 
     V_LOG("/proc/%s created\n", PROCFS_NAME);
 
@@ -495,11 +506,13 @@ init_module(void)
         );
     V_LOG("w = %p, w.trbase = %lx\n", w_list, w_list->htrbase);
 
+/*
     init_timer(&my_timer);
     my_timer.function = (void *) (my_timer_func);
     my_timer.data = 0;
     my_timer.expires = jiffies + HZ / 2;
     add_timer(&my_timer);
+*/
     return 0;
 }
 
@@ -509,7 +522,9 @@ cleanup_module(void)
     v_destroy_world(w_list);
     vfree(tempBuffer);
     remove_proc_entry(PROCFS_NAME, NULL);
+/*
     del_timer(&my_timer);
+*/
     cdev_del(&btc_device.cdev);
     unregister_chrdev_region(MKDEV(btc_major, 0), 1);
     V_EVENT("Exit.\n");
