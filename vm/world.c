@@ -92,6 +92,7 @@ v_create_world(unsigned long pages)
     world->pool_count = 0;
     world->monitor_buffer_start = 0;
     world->monitor_buffer_end = 0;
+    world->cpu_init_mask = 1 << (host_processor_id());
 #ifdef BT_CACHE
     world->pb_cache = lru_cache_init(2047, sizeof(struct cache_target_payload));
 #endif

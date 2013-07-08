@@ -153,7 +153,7 @@ struct h_cpu {
 } __attribute__ ((__packed__));
 
 int h_cpu_init(void);
-
+#define host_processor_id() smp_processor_id()
 struct v_world;
 /*world switch function */
 void h_switcher(unsigned long, struct v_world *);

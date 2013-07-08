@@ -49,6 +49,7 @@ struct v_world {
     unsigned long long last_tsc;
     unsigned long long total_tsc;
     unsigned int int_enable;
+    unsigned int cpu_init_mask;
     unsigned long htrbase;
     struct v_poi *poi;
     int find_poi;

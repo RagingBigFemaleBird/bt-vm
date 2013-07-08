@@ -187,6 +187,11 @@ btc_work_func(struct work_struct *work)
     preempt_disable();
     curr = w_list;
     if (curr->status != VM_PAUSED) {
+        if (!(curr->cpu_init_mask & (1 << host_processor_id()))) {
+            preempt_enable();
+            spin_unlock_irqrestore(&e_lock, flags);
+            return;
+        }
 /*	if ((stepping % 150) == 2)
 	    v_relocate = 1;
 	if ((stepping % 150) == 3)
@@ -505,7 +510,7 @@ init_module(void)
 #endif
         );
     V_LOG("w = %p, w.trbase = %lx\n", w_list, w_list->htrbase);
-
+    V_ERR("Initialization complete on CPU %x", host_processor_id());
 /*
     init_timer(&my_timer);
     my_timer.function = (void *) (my_timer_func);
