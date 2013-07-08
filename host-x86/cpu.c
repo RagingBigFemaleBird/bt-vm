@@ -1061,6 +1061,9 @@ h_switch_to(unsigned long trbase, struct v_world *w)
     struct h_regs *h = &w->hregs;
     unsigned long long tsc;
     if (w->status == VM_IDLE) {
+        tsc = h_perf_tsc_read();
+        w->total_tsc += tsc - w->last_tsc;
+        w->last_tsc = tsc;
         if (!(h->gcpu.eflags & H_EFLAGS_TF))
             g_pic_serve(w);
     }

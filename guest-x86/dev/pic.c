@@ -71,7 +71,7 @@ g_pic_serve(struct v_world *w)
         /*&& (w->gregs.dev.pic.d0IRQ_req & G_PIC_TIMER) */
         && (!(w->gregs.dev.pic.d0IRQ_srv))) {
         V_EVENT("trigger timer interrupt");
-        w->gregs.dev.pic.expected_jiffies = h_perf_tsc_read();
+        w->gregs.dev.pic.expected_jiffies = w->total_tsc;
         w->gregs.dev.pic.d0IRQ_srv |= G_PIC_TIMER;
         w->gregs.has_errorc = 0;
         h_inject_int(w, w->gregs.dev.pic.d0IRQ + G_PIC_TIMER_INT);
