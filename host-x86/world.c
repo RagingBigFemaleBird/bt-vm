@@ -21,7 +21,6 @@
 #include "vm/include/logging.h"
 #include "host/include/cpu.h"
 
-extern struct h_cpu hostcpu;
 extern void trap_start(void);
 extern void h_switcher(unsigned long trbase, struct v_world *w);
 
@@ -50,8 +49,8 @@ h_world_init(struct v_world *world)
     struct v_chunk *table = h_raw_palloc(1);
     void *va = h_allocv(table->phys);
     void *vb = h_allocv(table->phys + H_PAGE_SIZE);
-    void *old = (void *) hostcpu.gdt.base;
-    void *new;
+    void *old;
+    void *newtb;
     unsigned int eflags;
     void (*trap) (void) = trap_start;
     unsigned int *intr;
@@ -79,33 +78,34 @@ h_world_init(struct v_world *world)
     world->hregs.gcpu.idt.limit = 0x7ff;
     world->hregs.gcpu.gdt.base = (unsigned int) vb;
     world->hregs.gcpu.gdt.limit = 0x7ff;
-    h_memset((void *) world->hregs.gcpu.gdt.base, 0, hostcpu.gdt.limit + 1);
-    new = (void *) (world->hregs.gcpu.gdt.base);
+    h_memset((void *) world->hregs.gcpu.gdt.base, 0,
+        world->hregs.gcpu.gdt.limit + 1);
+    newtb = (void *) (world->hregs.gcpu.gdt.base);
     traddr = (unsigned int) (&world->hregs.gcpu.trsave);
-    new = new + 0x7d8;          //modify IDT & init cs if you change this
-    *(unsigned int *) new =
+    newtb = newtb + 0x7d8;      //modify IDT & init cs if you change this
+    *(unsigned int *) newtb =
         ((sizeof(struct h_tr_table)) & 0x0000ffff) | (traddr << 16);
-    new = new + 4;
-    *(unsigned int *) new =
+    newtb = newtb + 4;
+    *(unsigned int *) newtb =
         0x00008b00 | (traddr & 0xff000000) | (traddr >> 16 << 24 >> 24);
-    new = new + 4;
+    newtb = newtb + 4;
 
-    *(unsigned int *) new = 0x0000ffff;
-    new = new + 4;
-    *(unsigned int *) new = 0x008ffa00;
-    new = new + 4;
-    *(unsigned int *) new = 0x0000ffff;
-    new = new + 4;
-    *(unsigned int *) new = 0x008ff200;
-    new = new + 4;
+    *(unsigned int *) newtb = 0x0000ffff;
+    newtb = newtb + 4;
+    *(unsigned int *) newtb = 0x008ffa00;
+    newtb = newtb + 4;
+    *(unsigned int *) newtb = 0x0000ffff;
+    newtb = newtb + 4;
+    *(unsigned int *) newtb = 0x008ff200;
+    newtb = newtb + 4;
 
-    *(unsigned int *) new = 0x0000ffff;
-    new = new + 4;
-    *(unsigned int *) new = 0x00cf9a00;
-    new = new + 4;
-    *(unsigned int *) new = 0x0000ffff;
-    new = new + 4;
-    *(unsigned int *) new = 0x00cf9200;
+    *(unsigned int *) newtb = 0x0000ffff;
+    newtb = newtb + 4;
+    *(unsigned int *) newtb = 0x00cf9a00;
+    newtb = newtb + 4;
+    *(unsigned int *) newtb = 0x0000ffff;
+    newtb = newtb + 4;
+    *(unsigned int *) newtb = 0x00cf9200;
 
     intr = (void *) (world->hregs.gcpu.idt.base);
     old = trap;
@@ -126,7 +126,6 @@ h_world_init(struct v_world *world)
             old += 4;
     }
 
-    h_memcpy(&(world->hregs.hcpu), &hostcpu, sizeof(struct h_cpu));
     asm volatile ("pushf");
     asm volatile ("pop %0":"=r" (eflags));
     eflags = H_EFLAGS_VM | H_EFLAGS_IF;
@@ -166,6 +165,7 @@ h_world_init(struct v_world *world)
     world->hregs.gcpu.trsave.iomap = sizeof(struct h_tr_table) + 1;
     world->hregs.gcpu.dr7 = 0x700;
 
+    asm volatile ("movl $restoreCS, %0":"=r" (world->hregs.hcpu.eip));
     world->hregs.hcpu.switcher = h_switcher;
     world->total_tsc = world->last_tsc = 0;
     table = h_raw_palloc(0);
@@ -189,24 +189,23 @@ h_relocate_npage(struct v_world *w)
     unsigned int oldnp = (unsigned int) (w->hregs.hcpu.switcher);
     void (*trap) (void);
     unsigned int *intr;
-    unsigned int i;
+    unsigned int i, eip;
     void *old;
     struct v_chunk *chunk = h_raw_palloc(0);
     unsigned int phys = chunk->phys;
     void *virt = h_allocv(phys);
     h_memcpy(virt, w->hregs.hcpu.switcher, 4096);
     w->hregs.hcpu.switcher = virt;
-    h_virt_make_executable((h_addr_t)virt, H_PAGE_SIZE);
+    h_virt_make_executable((h_addr_t) virt, H_PAGE_SIZE);
 
     h_monitor_fault_check_fixup(w);
 
     trap =
         (void (*)(void)) ((((unsigned int) trap_start) & H_POFF_MASK) +
         (((unsigned int) virt) & H_PFN_MASK));
-    asm volatile ("movl $restoreCS, %0":"=r" (hostcpu.eip));
-    hostcpu.eip =
-        (hostcpu.eip & H_POFF_MASK) + (((unsigned int) virt) & H_PFN_MASK);
-    w->hregs.hcpu.eip = hostcpu.eip;
+    asm volatile ("movl $restoreCS, %0":"=r" (eip));
+    eip = (eip & H_POFF_MASK) + (((unsigned int) virt) & H_PFN_MASK);
+    w->hregs.hcpu.eip = eip;
 
     if (spt == NULL) {
         h_set_map(w->htrbase, oldnp, 0, 1, V_PAGE_NOMAP);
@@ -284,22 +283,22 @@ void
 h_relocate_world(struct v_world *w, struct v_world *w_new)
 {
     struct v_spt_info *spt = w->spt_list;
-    void *new;
+    void *newtb;
     unsigned int traddr;
 
     V_ERR("world data change from %x to %x ",
         (unsigned int) h_v2p((h_addr_t) w),
         (unsigned int) h_v2p((h_addr_t) w_new));
 
-    new = (void *) (w->hregs.gcpu.gdt.base);
+    newtb = (void *) (w->hregs.gcpu.gdt.base);
     traddr = (unsigned int) (&w_new->hregs.gcpu.trsave);
-    new = new + 0x7d8;          //modify IDT & init cs if you change this
-    *(unsigned int *) new =
+    newtb = newtb + 0x7d8;      //modify IDT & init cs if you change this
+    *(unsigned int *) newtb =
         ((sizeof(struct h_tr_table)) & 0x0000ffff) | (traddr << 16);
-    new = new + 4;
-    *(unsigned int *) new =
+    newtb = newtb + 4;
+    *(unsigned int *) newtb =
         0x00008b00 | (traddr & 0xff000000) | (traddr >> 16 << 24 >> 24);
-    new = new + 4;
+    newtb = newtb + 4;
 
     if (w->gregs.mode == G_MODE_REAL)
         w->hregs.gcpu.trsave.esp0 = (unsigned int) (&w_new->hregs.gcpu.cpuid0);

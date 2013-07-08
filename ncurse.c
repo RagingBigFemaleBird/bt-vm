@@ -123,14 +123,14 @@ do_keys(void)
                         unsigned char fg = ((unsigned char *)
                             address)[(i * 80 + j) * 2];
                         if (fg == 0) {
-                            fg = ' ';       // so that it displays
+                            fg = ' ';   // so that it displays
                         }
                         mvprintw(i - start_line, j, "%c", fg);
                     }
                 }
             }
             refresh();
-       }
+        }
 //        mvprintw(row / 2, 40, "%d", counter);
 //        timeout(1000);
         updated = ioctl(fileno(f), BTC_RUN, 0);
@@ -138,7 +138,8 @@ do_keys(void)
         nodelay(stdscr, TRUE);
         keypad(stdscr, TRUE);
         c = getch();
-        if (c == ERR) continue;
+        if (c == ERR)
+            continue;
         switch (c) {
         case KEY_HOME:
             if (start_line > 0);

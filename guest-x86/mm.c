@@ -159,7 +159,7 @@ g_pagetable_map(struct v_world *world, g_addr_t virt)
     struct v_spt_info *spt = v_spt_get_by_spt(world, world->htrbase);
     if (spt != NULL) {
         int g_mode = world->gregs.mode;
-        struct v_ptp_info *new;
+        struct v_ptp_info *newp;
         struct v_ptp_info **p;
         void *x;
         void *l1;
@@ -195,17 +195,17 @@ g_pagetable_map(struct v_world *world, g_addr_t virt)
             p = &((*p)->next);
         }
         if (!exist) {
-            new = h_raw_malloc(sizeof(struct v_ptp_info));
+            newp = h_raw_malloc(sizeof(struct v_ptp_info));
             p = &(mpage->ptp_list);
 
-            new->vaddr = (virt & H_PFN_MASK);
-            new->spt = spt;
-            new->next = NULL;
-            new->gpt_level = 1;
+            newp->vaddr = (virt & H_PFN_MASK);
+            newp->spt = spt;
+            newp->next = NULL;
+            newp->gpt_level = 1;
             while (*p != NULL) {
                 p = &((*p)->next);
             }
-            (*p) = new;
+            (*p) = newp;
             V_LOG("marking mfn %x as pt1", (unsigned int) mpage->mfn);
         }
 
@@ -241,17 +241,17 @@ g_pagetable_map(struct v_world *world, g_addr_t virt)
             p = &((*p)->next);
         }
         if (!exist) {
-            new = h_raw_malloc(sizeof(struct v_ptp_info));
+            newp = h_raw_malloc(sizeof(struct v_ptp_info));
             p = &(mpage->ptp_list);
 
-            new->vaddr = (virt & H_PFN_MASK);
-            new->spt = spt;
-            new->next = NULL;
-            new->gpt_level = 1;
+            newp->vaddr = (virt & H_PFN_MASK);
+            newp->spt = spt;
+            newp->next = NULL;
+            newp->gpt_level = 1;
             while (*p != NULL) {
                 p = &((*p)->next);
             }
-            (*p) = new;
+            (*p) = newp;
             V_LOG("marking mfn %x as pt2", (unsigned int) mpage->mfn);
         }
 

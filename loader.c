@@ -161,7 +161,7 @@ procfile_write(struct file *file, const char *buffer, unsigned long count,
                     5000000
 #endif
 #ifdef CONFIG_X86
-                    512 * 2 * 254 * 254      /*max size*/
+                    512 * 2 * 254 * 254 /*max size */
 #endif
                 )) == NULL)
             return -EFAULT;
@@ -188,9 +188,9 @@ btc_work_func(struct work_struct *work)
     curr = w_list;
     if (curr->status != VM_PAUSED) {
         if (!(curr->cpu_init_mask & (1 << host_processor_id()))) {
-            preempt_enable();
-            spin_unlock_irqrestore(&e_lock, flags);
-            return;
+            h_cpu_init();
+            curr->cpu_init_mask |= 1 << host_processor_id();
+            V_ERR("Initialized on CPU %x", 1 << host_processor_id());
         }
 /*	if ((stepping % 150) == 2)
 	    v_relocate = 1;

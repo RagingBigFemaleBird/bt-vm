@@ -36,7 +36,6 @@
 
 extern volatile int step;
 extern volatile int time_up;
-struct h_cpu hostcpu;
 #define QUICKPATH_GP_ENABLED
 
 static void h_do_int(unsigned int int_no);
@@ -56,6 +55,7 @@ void h_switcher(unsigned long trbase, struct v_world *w);
 int
 h_cpu_init(void)
 {
+    struct h_cpu hostcpu;
     int wd_size = sizeof(struct v_world);
     unsigned int cr0;
     unsigned int msr_l, msr_h;
@@ -148,6 +148,10 @@ h_cpu_save(struct v_world *w)
     asm volatile ("pushf");
     asm volatile ("pop %0":"=r" (h->hcpu.eflags));
     asm volatile ("movl %%dr7, %0":"=r" (h->hcpu.dr7));
+    asm volatile ("sgdt (%0)"::"r" (&h->hcpu.gdt):"memory");
+    asm volatile ("sidt (%0)"::"r" (&h->hcpu.idt):"memory");
+    asm volatile ("sldt %0":"=r" (h->hcpu.ldt)::"memory");
+    asm volatile ("str %0":"=r" (h->hcpu.tr)::"memory");
 /*    if (!bp_reached)
         h_set_bp(w, bpaddr, 3);*/
 }

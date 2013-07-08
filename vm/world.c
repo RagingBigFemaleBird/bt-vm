@@ -124,6 +124,7 @@ v_destroy_world(struct v_world *world)
 int
 v_switch_to(struct v_world *world)
 {
+    h_cpu_save(world);
     do {
         if (g_in_priv(world)) {
             if (world->poi == NULL) {
@@ -137,7 +138,6 @@ v_switch_to(struct v_world *world)
         } else {
             v_bt_reset(world);
         }
-        h_cpu_save(world);
     } while (world->npage(world->htrbase, world)
         && (world->status == VM_RUNNING));
     return 0;
