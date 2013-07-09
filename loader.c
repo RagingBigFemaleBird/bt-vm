@@ -331,6 +331,7 @@ btc_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
             if (init && curr->status == VM_RUNNING) {
                 init = 0;
                 g_disk_length = len;
+                g_dev_floppy_density = (g_disk_length - 1) / (512 * 2880) + 1;
             }
             for (i = 0; i < V_PERF_COUNT; i++) {
                 V_ERR("VM Perf Counter %x, %lx", i, v_perf_get(i));
