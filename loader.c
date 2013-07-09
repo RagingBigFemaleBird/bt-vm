@@ -483,6 +483,8 @@ init_module(void)
 /*
     btc_wq = create_workqueue("btc");
 */
+
+    preempt_disable();
     if (h_cpu_init())
         return -EIO;
 
@@ -510,6 +512,7 @@ init_module(void)
         0x4000                  /* pages */
 #endif
         );
+    preempt_enable();
     V_LOG("w = %p, w.trbase = %lx\n", w_list, w_list->htrbase);
     V_ERR("Initialization complete on CPU %x", host_processor_id());
 /*

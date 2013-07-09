@@ -15,9 +15,6 @@
  *  You should have received a copy of the GNU General Public License
  *   along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#include <linux/mm.h>
-#include <linux/gfp.h>
-#include <asm/io.h>
 #include "host/include/mm.h"
 #include "host/include/bt.h"
 #include "vm/include/world.h"
@@ -150,8 +147,6 @@ h_cpu_save(struct v_world *w)
     asm volatile ("movl %%dr7, %0":"=r" (h->hcpu.dr7));
     asm volatile ("sgdt (%0)"::"r" (&h->hcpu.gdt):"memory");
     asm volatile ("sidt (%0)"::"r" (&h->hcpu.idt):"memory");
-    asm volatile ("sldt %0":"=r" (h->hcpu.ldt)::"memory");
-    asm volatile ("str %0":"=r" (h->hcpu.tr)::"memory");
 /*    if (!bp_reached)
         h_set_bp(w, bpaddr, 3);*/
 }
