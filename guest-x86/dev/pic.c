@@ -68,7 +68,9 @@ g_pic_serve(struct v_world *w)
     w->status = VM_RUNNING;
     if (w->gregs.mode != G_MODE_REAL /* note: hack */  &&
         v_int_enabled(w) && (!(w->gregs.dev.pic.d0IRQ_mask & G_PIC_TIMER))
+/*
         && (w->gregs.dev.pic.d0IRQ_req & G_PIC_TIMER)
+*/
         && (!(w->gregs.dev.pic.d0IRQ_srv))) {
         V_EVENT("trigger timer interrupt");
         w->gregs.dev.pic.expected_jiffies = w->total_tsc;
