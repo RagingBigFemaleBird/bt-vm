@@ -105,6 +105,7 @@ struct h_cpu {
 } __attribute__ ((__packed__));
 
 int h_cpu_init(void);
+#define host_processor_id() smp_processor_id()
 
 /* switch to this translation base */
 struct v_world;

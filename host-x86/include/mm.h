@@ -54,20 +54,20 @@ h_addr_t h_v2p(h_addr_t);
 #define h_memset(dst, src, size) memset((dst), (src), (size))
 
 /* host raw memory allocator, returns virtual address, NULL if failed */
-void *h_raw_malloc(unsigned long size);
-void h_raw_dealloc(void *addr);
+void *h_valloc(unsigned long size);
+void h_vfree(void *addr);
 
 /* host raw memory page allocator, returns machine address, NULL if failed */
-struct v_chunk *h_raw_palloc(unsigned int order);
-void h_raw_depalloc(struct v_chunk *v);
+struct v_chunk *h_palloc(unsigned int order);
+void h_pfree(struct v_chunk *v);
 
 /* allocate/deallocate virtual page for the specific physical page */
-void *h_allocv(h_addr_t);
-void h_deallocv(h_addr_t);
+void *h_alloc_va(h_addr_t);
+void h_free_va(h_addr_t);
 
 /* temporaryly allocate virtual page. the first address may fail as soon as the second call is made */
-void *h_allocv_temp(h_addr_t);
-void *h_allocv_temp2(h_addr_t);
+void *h_alloc_va_temp(h_addr_t);
+void *h_alloc_va_temp2(h_addr_t);
 
 /* set p2m mapping for the specified vm, p, length, m */
 void h_set_p2m(struct v_world *, g_addr_t, unsigned long, h_addr_t);

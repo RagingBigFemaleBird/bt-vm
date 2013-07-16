@@ -285,7 +285,9 @@ struct vm_operations_struct btc_vm_ops = {
 
 extern unsigned int bpaddr;
 extern int usermode_tests_reset;
+#ifdef CONFIG_X86
 extern unsigned int g_dev_floppy_density;
+#endif
 
 #ifdef CONFIG_X86
 #ifdef HAVE_UNLOCKED_IOCTL
@@ -331,7 +333,9 @@ btc_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
             if (init && curr->status == VM_RUNNING) {
                 init = 0;
                 g_disk_length = len;
+#ifdef CONFIG_X86
                 g_dev_floppy_density = (g_disk_length - 1) / (512 * 2880) + 1;
+#endif
             }
             for (i = 0; i < V_PERF_COUNT; i++) {
                 V_ERR("VM Perf Counter %x, %lx", i, v_perf_get(i));

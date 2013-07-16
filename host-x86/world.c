@@ -46,9 +46,9 @@ h_monitor_fault_check_fixup(struct v_world *world)
 void
 h_world_init(struct v_world *world)
 {
-    struct v_chunk *table = h_raw_palloc(1);
-    void *va = h_allocv(table->phys);
-    void *vb = h_allocv(table->phys + H_PAGE_SIZE);
+    struct v_chunk *table = h_palloc(1);
+    void *va = h_alloc_va(table->phys);
+    void *vb = h_alloc_va(table->phys + H_PAGE_SIZE);
     void *old;
     void *newtb;
     unsigned int eflags;
@@ -168,8 +168,8 @@ h_world_init(struct v_world *world)
     asm volatile ("movl $restoreCS, %0":"=r" (world->hregs.hcpu.eip));
     world->hregs.hcpu.switcher = h_switcher;
     world->total_tsc = world->last_tsc = 0;
-    table = h_raw_palloc(0);
-    world->hregs.fpu = h_allocv(table->phys);
+    table = h_palloc(0);
+    world->hregs.fpu = h_alloc_va(table->phys);
     asm volatile ("fxsave (%0)"::"r" (world->hregs.fpu + 512));
     world->hregs.fpusaved = 0;
 
@@ -191,9 +191,9 @@ h_relocate_npage(struct v_world *w)
     unsigned int *intr;
     unsigned int i, eip;
     void *old;
-    struct v_chunk *chunk = h_raw_palloc(0);
+    struct v_chunk *chunk = h_palloc(0);
     unsigned int phys = chunk->phys;
-    void *virt = h_allocv(phys);
+    void *virt = h_alloc_va(phys);
     h_memcpy(virt, w->hregs.hcpu.switcher, 4096);
     w->hregs.hcpu.switcher = virt;
     h_virt_make_executable((h_addr_t) virt, H_PAGE_SIZE);
@@ -243,9 +243,9 @@ void
 h_relocate_tables(struct v_world *w)
 {
     struct v_spt_info *spt = w->spt_list;
-    struct v_chunk *table = h_raw_palloc(1);
-    void *vidt = h_allocv(table->phys);
-    void *vgdt = h_allocv(table->phys + H_PAGE_SIZE);
+    struct v_chunk *table = h_palloc(1);
+    void *vidt = h_alloc_va(table->phys);
+    void *vgdt = h_alloc_va(table->phys + H_PAGE_SIZE);
     struct v_chunk v;
     v.order = 1;
     v.phys = h_v2p((h_addr_t) w->hregs.gcpu.idt.base);
@@ -276,7 +276,7 @@ h_relocate_tables(struct v_world *w)
         }
     w->hregs.gcpu.gdt.base = (unsigned int) vgdt;
     w->hregs.gcpu.idt.base = (unsigned int) vidt;
-    h_raw_depalloc(&v);
+    h_pfree(&v);
 }
 
 void

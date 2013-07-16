@@ -233,7 +233,7 @@ h_bt_exec_cache(struct v_world *world,
     void *cache = world->hregs.hcpu.switcher;
     cache += cache_offset;
     if (cont->exec_cache == NULL)
-        cont->exec_cache = h_raw_malloc(TOTAL_BT_CACHED_AREA_SIZE);
+        cont->exec_cache = h_valloc(TOTAL_BT_CACHED_AREA_SIZE);
     h_memcpy(cont->exec_cache, cache, TOTAL_BT_CACHED_AREA_SIZE);
 }
 
@@ -1138,7 +1138,7 @@ h_switch_to(unsigned long trbase, struct v_world *w)
             h_clear_bp(w, 3);
             fb = g_fb_dump_text(w);
             V_ERR("BP reached");
-            h_raw_dealloc(fb);
+            h_vfree(fb);
         }
         v_perf_inc(V_PERF_BT, 1);
         asm volatile ("mov %%dr6, %0":"=r" (dr));
@@ -1324,18 +1324,18 @@ h_delete_trbase(struct v_world *world)
     v.phys = world->htrbase;
     for (i = 0; i < (1 << H_TRBASE_ORDER); i++) {
 
-        htrv = h_allocv(world->htrbase + i * H_PAGE_SIZE);
+        htrv = h_alloc_va(world->htrbase + i * H_PAGE_SIZE);
         for (j = 0; j < H_PAGE_SIZE; j += 4) {
             if ((*(unsigned int *) (htrv + j)) & 0x1) {
                 struct v_chunk v;
                 v.order = 0;
                 v.phys = *(unsigned int *) (htrv + j) & 0xfffff000;
-                h_raw_depalloc(&v);
+                h_pfree(&v);
             }
         }
-        h_deallocv(world->htrbase + i * H_PAGE_SIZE);
+        h_free_va(world->htrbase + i * H_PAGE_SIZE);
     }
-    h_raw_depalloc(&v);
+    h_pfree(&v);
 }
 
 static void
@@ -1347,17 +1347,17 @@ h_inv_pagetable(struct v_world *world, struct v_spt_info *spt,
     unsigned int i, j;
     for (i = 0; i < (1 << H_TRBASE_ORDER); i++) {
 
-        htrv = h_allocv(spt->spt_paddr + i * H_PAGE_SIZE);
+        htrv = h_alloc_va(spt->spt_paddr + i * H_PAGE_SIZE);
         for (j = 0; j < H_PAGE_SIZE; j += 4) {
             if ((*(unsigned int *) (htrv + j)) & 0x1) {
                 struct v_chunk v;
                 v.order = 0;
                 v.phys = *(unsigned int *) (htrv + j) & 0xfffff000;
-                h_raw_depalloc(&v);
+                h_pfree(&v);
             }
         }
         h_clear_page(htrv);
-        h_deallocv(spt->spt_paddr + i * H_PAGE_SIZE);
+        h_free_va(spt->spt_paddr + i * H_PAGE_SIZE);
     }
     h_set_map(spt->spt_paddr, (h_addr_t) world,
         h_v2p((h_addr_t) world), 1, V_PAGE_W | V_PAGE_VM);
@@ -1404,13 +1404,13 @@ h_inv_spt(struct v_world *world, struct v_spt_info *spt)
                         h_inv_pagetable(world, spt,
                             (*pl)->vaddr, (*pl)->gpt_level);
                 }
-                h_raw_dealloc((*pl));
+                h_vfree((*pl));
                 (*pl) = next;
             } else
                 pl = &((*pl)->next);
         }
         *p = (*p)->next;
-        h_raw_dealloc(psave);
+        h_vfree(psave);
     }
 }
 
@@ -1423,13 +1423,13 @@ h_new_trbase(struct v_world *world)
     int i;
     unsigned int cr3 = (world->gregs.mode == G_MODE_PG) ? world->gregs.cr3 : 1;
     if ((spt = v_spt_get_by_gpt(world, cr3)) == NULL) {
-        trbase = h_raw_palloc(H_TRBASE_ORDER);
+        trbase = h_palloc(H_TRBASE_ORDER);
         world->htrbase = (unsigned long) (trbase->phys);
         V_EVENT("new base: %lx from %x", world->htrbase, cr3);
         for (i = 0; i < (1 << H_TRBASE_ORDER); i++) {
-            htrv = h_allocv(world->htrbase + i * H_PAGE_SIZE);
+            htrv = h_alloc_va(world->htrbase + i * H_PAGE_SIZE);
             h_clear_page(htrv);
-            h_deallocv(world->htrbase + i * H_PAGE_SIZE);
+            h_free_va(world->htrbase + i * H_PAGE_SIZE);
         }
         h_set_map(world->htrbase, (h_addr_t) world,
             h_v2p((unsigned int) world), 1, V_PAGE_W | V_PAGE_VM);
@@ -2151,7 +2151,7 @@ h_gpfault(struct v_world *world)
         h_read_guest(world, g_ip + 12, (unsigned int *) &bound[12]);
         inst = (unsigned char *) &bound;
     } else {
-        virt = h_allocv(map & H_PFN_MASK);
+        virt = h_alloc_va(map & H_PFN_MASK);
         virt = virt + (g_ip & H_POFF_MASK);
         inst = virt;
     }
@@ -2490,7 +2490,7 @@ h_gpfault(struct v_world *world)
                     V_LOG("LGDT x86/16 Guest GP Fault\n");
                     break;
                 }
-                virt = h_allocv(mpage->mfn << H_PAGE_SHIFT);
+                virt = h_alloc_va(mpage->mfn << H_PAGE_SHIFT);
                 V_LOG("ds mem: %x /", addr);
                 h_memcpy(&world->gregs.gdt,
                     (void *) (((unsigned int) (virt) & H_PFN_MASK)
@@ -2539,7 +2539,7 @@ h_gpfault(struct v_world *world)
                     V_LOG("LGDT x86/16 Guest GP Fault\n");
                     break;
                 }
-                virt = h_allocv(mpage->mfn << H_PAGE_SHIFT);
+                virt = h_alloc_va(mpage->mfn << H_PAGE_SHIFT);
                 V_LOG("mem: %x /", addr);
                 h_memcpy(&world->gregs.gdt,
                     (void *) (((unsigned int) (virt) & H_PFN_MASK)
@@ -2583,7 +2583,7 @@ h_gpfault(struct v_world *world)
                     V_LOG("LGDT Guest GP Fault\n");
                     break;
                 }
-                virt = h_allocv(mpage->mfn << H_PAGE_SHIFT);
+                virt = h_alloc_va(mpage->mfn << H_PAGE_SHIFT);
                 V_LOG("ds mem: %x /", addr);
                 h_memcpy(&world->gregs.gdt,
                     (void *) (((unsigned int) (virt) & H_PFN_MASK)
@@ -2620,7 +2620,7 @@ h_gpfault(struct v_world *world)
                     V_LOG("LIDT Guest GP Fault\n");
                     break;
                 }
-                virt = h_allocv(mpage->mfn << H_PAGE_SHIFT);
+                virt = h_alloc_va(mpage->mfn << H_PAGE_SHIFT);
                 V_LOG("ds mem: %x /", addr);
                 h_memcpy(&world->gregs.idt,
                     (void *) (((unsigned int) (virt) & H_PFN_MASK)
@@ -2662,7 +2662,7 @@ h_gpfault(struct v_world *world)
                     V_LOG("LIDT Guest GP Fault\n");
                     break;
                 }
-                virt = h_allocv(mpage->mfn << H_PAGE_SHIFT);
+                virt = h_alloc_va(mpage->mfn << H_PAGE_SHIFT);
                 V_LOG("ds mem: %x /", addr);
                 h_memcpy(&world->gregs.idt,
                     (void *) (((unsigned int) (virt) & H_PFN_MASK)

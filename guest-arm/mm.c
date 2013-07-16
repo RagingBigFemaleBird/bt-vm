@@ -69,10 +69,10 @@ g_v2attr(struct v_world *world, unsigned long virt)
         V_VERBOSE("l1a %x", ret);
         if ((*(unsigned int *) l1) & G_PAGE_L1P) {
             /* 11 case, fault */
-            h_deallocv(mpage->mfn << H_PAGE_SHIFT);
+            h_free_va(mpage->mfn << H_PAGE_SHIFT);
             return V_PAGE_NOMAP;
         }
-        h_deallocv(mpage->mfn << H_PAGE_SHIFT);
+        h_free_va(mpage->mfn << H_PAGE_SHIFT);
         return v_attr;
     }
     if (!((*(unsigned int *) l1) & G_PAGE_P))
@@ -92,10 +92,10 @@ g_v2attr(struct v_world *world, unsigned long virt)
         v_attr = V_PAGE_SYS | V_PAGE_W;
     }
     if (!((*(unsigned int *) l2) & G_PAGE_L2P)) {
-        h_deallocv(mpage->mfn << H_PAGE_SHIFT);
+        h_free_va(mpage->mfn << H_PAGE_SHIFT);
         return V_PAGE_NOMAP;
     }
-    h_deallocv(mpage->mfn << H_PAGE_SHIFT);
+    h_free_va(mpage->mfn << H_PAGE_SHIFT);
     return v_attr;
 }
 
@@ -134,10 +134,10 @@ g_v2p(struct v_world *world, unsigned long virt, unsigned int do_not_fault)
         if ((*(unsigned int *) l1) & G_PAGE_L1P) {
             V_VERBOSE("Page fault lvl 1 %x, unimplemented",
                 *(unsigned int *) l1);
-            h_deallocv(mpage->mfn << H_PAGE_SHIFT);
+            h_free_va(mpage->mfn << H_PAGE_SHIFT);
             return 0xfffff000;
         }
-        h_deallocv(mpage->mfn << H_PAGE_SHIFT);
+        h_free_va(mpage->mfn << H_PAGE_SHIFT);
         return ret;
     }
     if (!((*(unsigned int *) l1) & G_PAGE_P)) {
@@ -148,7 +148,7 @@ g_v2p(struct v_world *world, unsigned long virt, unsigned int do_not_fault)
     mpage = h_p2mp(world, *(unsigned int *) l1);
     if (mpage == NULL) {
         V_ERR("Page fault: %lx no map, unimplemented", virt);
-        h_deallocv(mpage->mfn << H_PAGE_SHIFT);
+        h_free_va(mpage->mfn << H_PAGE_SHIFT);
         return 0xfffff000;
     }
     l2 = v_page_make_present(mpage);
@@ -157,10 +157,10 @@ g_v2p(struct v_world *world, unsigned long virt, unsigned int do_not_fault)
     V_VERBOSE("l2a %x", ret);
     if (!((*(unsigned int *) l2) & G_PAGE_L2P)) {
         V_VERBOSE("Page fault, NP at l2 %x", *(unsigned int *) l2);
-        h_deallocv(mpage->mfn << H_PAGE_SHIFT);
+        h_free_va(mpage->mfn << H_PAGE_SHIFT);
         return 0xfffff000;
     }
-    h_deallocv(mpage->mfn << H_PAGE_SHIFT);
+    h_free_va(mpage->mfn << H_PAGE_SHIFT);
     return ret;
 }
 
@@ -206,7 +206,7 @@ g_pagetable_map(struct v_world *world, unsigned long virt)
             p = &((*p)->next);
         }
         if (!exist) {
-            new = h_raw_malloc(sizeof(struct v_ptp_info));
+            new = h_valloc(sizeof(struct v_ptp_info));
             p = &(mpage->ptp_list);
 
             new->vaddr = virt;
@@ -223,11 +223,11 @@ g_pagetable_map(struct v_world *world, unsigned long virt)
         x = v_page_make_present(mpage);
         l1 = (g_pt1_off((unsigned int) virt) & H_POFF_MASK) + x;
         if ((*(unsigned int *) l1) & G_PAGE_L1S) {
-            h_deallocv(mpage->mfn << H_PAGE_SHIFT);
+            h_free_va(mpage->mfn << H_PAGE_SHIFT);
             return;
         }
         if (!((*(unsigned int *) l1) & G_PAGE_P)) {
-            h_deallocv(mpage->mfn << H_PAGE_SHIFT);
+            h_free_va(mpage->mfn << H_PAGE_SHIFT);
             return;
         }
         mpage = h_p2mp(world, *(unsigned int *) l1);
@@ -252,7 +252,7 @@ g_pagetable_map(struct v_world *world, unsigned long virt)
             p = &((*p)->next);
         }
         if (!exist) {
-            new = h_raw_malloc(sizeof(struct v_ptp_info));
+            new = h_valloc(sizeof(struct v_ptp_info));
             p = &(mpage->ptp_list);
 
             new->vaddr = virt;
@@ -265,7 +265,7 @@ g_pagetable_map(struct v_world *world, unsigned long virt)
             (*p) = new;
             V_EVENT("marking mfn %x as pt2", mpage->mfn);
         }
-        h_deallocv(mpage->mfn << H_PAGE_SHIFT);
+        h_free_va(mpage->mfn << H_PAGE_SHIFT);
 
     }
 }

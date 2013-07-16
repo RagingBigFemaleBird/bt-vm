@@ -76,7 +76,7 @@ lru_cache_init(unsigned int total, unsigned int payload_size)
     unsigned int total_size =
         sizeof(struct lru_cache) + total * (payload_size +
         sizeof(struct lru_cache_entry));
-    struct lru_cache *mem = (struct lru_cache *) h_raw_malloc(total_size);
+    struct lru_cache *mem = (struct lru_cache *) h_valloc(total_size);
     void *body;
     unsigned int unit_size = payload_size + sizeof(struct lru_cache_entry);
     int i;

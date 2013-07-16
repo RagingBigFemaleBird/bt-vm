@@ -156,7 +156,7 @@ v_add_ipoi(struct v_world *world, unsigned int addr, unsigned int key,
         i = i->next;
     }
     if (i == NULL) {
-        i = h_raw_malloc(sizeof(struct v_ipoi));
+        i = h_valloc(sizeof(struct v_ipoi));
         i->next = mpage->ipoi_list;
         mpage->ipoi_list = i;
     }
@@ -214,7 +214,7 @@ v_add_poi(struct v_world *world, struct v_page *mpage, unsigned int addr,
 struct v_fc *
 v_add_fc(struct v_page *mpage, unsigned int addr, unsigned int mode)
 {
-    struct v_fc *fc = h_raw_malloc(sizeof(struct v_fc));
+    struct v_fc *fc = h_valloc(sizeof(struct v_fc));
     fc->addr = addr;
     fc->ex_mode = mode;
     fc->SEE_checked = 0;
@@ -496,7 +496,7 @@ v_poi_construct_tree(struct v_world *world, struct v_poi *poi)
         return;
     }
     V_VERBOSE("explored %x items", current_bp_count);
-    poi->tree = h_raw_malloc(current_bp_count * sizeof(struct v_poi_tree));
+    poi->tree = h_valloc(current_bp_count * sizeof(struct v_poi_tree));
     h_memcpy(poi->tree, v_bp_array,
         current_bp_count * sizeof(struct v_poi_tree));
     poi->tree_count = current_bp_count;
@@ -1086,10 +1086,9 @@ v_bt_cache(struct v_world *world)
     total = world->current_valid_bps;
     if (world->poi->cached_plan == NULL) {
         struct v_poi_cached_tree_plan *plan =
-            h_raw_malloc(sizeof(struct v_poi_cached_tree_plan) *
-            BT_CACHE_CAPACITY);
+            h_valloc(sizeof(struct v_poi_cached_tree_plan) * BT_CACHE_CAPACITY);
         world->poi->cached_plan =
-            h_raw_malloc(sizeof(struct v_poi_cached_tree_plan_container));
+            h_valloc(sizeof(struct v_poi_cached_tree_plan_container));
         world->poi->cached_plan->plan = plan;
         world->poi->cached_plan->done = 0;
         world->poi->cached_plan->exec_cache = NULL;

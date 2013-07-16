@@ -91,7 +91,7 @@ SEE_verify1(struct v_world *w, struct v_fc *fc)
                     }
                     al = al->next;
                 }
-                al = h_raw_malloc(sizeof(struct addr_list));
+                al = h_valloc(sizeof(struct addr_list));
                 al->addr = last_ip;
                 al->next = head;
                 al->has_bt = 0;
@@ -109,7 +109,7 @@ SEE_verify1(struct v_world *w, struct v_fc *fc)
                 }
                 al = al->next;
             }
-            al = h_raw_malloc(sizeof(struct addr_list));
+            al = h_valloc(sizeof(struct addr_list));
             al->addr = last_ip;
             al->bt = b_target;
             al->next = head;
@@ -213,7 +213,7 @@ SEE_verify(struct v_world *w, struct v_fc *fc)
                     }
                     al = al->next;
                 }
-                al = h_raw_malloc(sizeof(struct addr_list));
+                al = h_valloc(sizeof(struct addr_list));
                 al->addr = last_ip;
                 al->next = head;
                 al->has_bt = 0;
@@ -232,7 +232,7 @@ SEE_verify(struct v_world *w, struct v_fc *fc)
                 }
                 al = al->next;
             }
-            al = h_raw_malloc(sizeof(struct addr_list));
+            al = h_valloc(sizeof(struct addr_list));
             al->addr = last_ip;
             al->bt = b_target;
             al->next = head;

@@ -28,7 +28,7 @@ g_fb_dump_text(struct v_world *world)
 {
     unsigned long i = 80 * 25;
     unsigned long j, k;
-    unsigned char *c = (unsigned char *) (h_raw_malloc(i + 25));
+    unsigned char *c = (unsigned char *) (h_valloc(i + 25));
     struct v_page *mpage;
     unsigned char *virt;
     mpage = h_p2mp(world, 0xb8000);

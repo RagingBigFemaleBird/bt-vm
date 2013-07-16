@@ -58,10 +58,10 @@ g_v2attr(struct v_world *world, g_addr_t virt)
             V_PAGE_CD : 0) | ((ret & G_PAGE_PWT)
             ? V_PAGE_WBD : 0);
         if (!((*(unsigned int *) l1) & G_PAGE_P)) {
-            h_deallocv(mpage->mfn << H_PAGE_SHIFT);
+            h_free_va(mpage->mfn << H_PAGE_SHIFT);
             return V_PAGE_NOMAP;
         }
-        h_deallocv(mpage->mfn << H_PAGE_SHIFT);
+        h_free_va(mpage->mfn << H_PAGE_SHIFT);
         return v_attr;
     }
     if (!((*(unsigned int *) l1) & G_PAGE_P))
@@ -75,10 +75,10 @@ g_v2attr(struct v_world *world, g_addr_t virt)
         V_PAGE_W : 0) | ((ret & G_PAGE_PCD)
         ? V_PAGE_CD : 0) | ((ret & G_PAGE_PWT) ? V_PAGE_WBD : 0);
     if (!((*(unsigned int *) l2) & G_PAGE_P)) {
-        h_deallocv(mpage->mfn << H_PAGE_SHIFT);
+        h_free_va(mpage->mfn << H_PAGE_SHIFT);
         return V_PAGE_NOMAP;
     }
-    h_deallocv(mpage->mfn << H_PAGE_SHIFT);
+    h_free_va(mpage->mfn << H_PAGE_SHIFT);
     return v_attr;
 }
 
@@ -114,10 +114,10 @@ g_v2p(struct v_world * world, g_addr_t virt, unsigned int do_not_fault)
                 V_ERR("Page fault lvl 1 %x, unimplemented",
                     *(unsigned int *) l1);
             }
-            h_deallocv(mpage->mfn << H_PAGE_SHIFT);
+            h_free_va(mpage->mfn << H_PAGE_SHIFT);
             return 0xffffffff;
         }
-        h_deallocv(mpage->mfn << H_PAGE_SHIFT);
+        h_free_va(mpage->mfn << H_PAGE_SHIFT);
         return ret;
     }
     if (!((*(unsigned int *) l1) & G_PAGE_P)) {
@@ -135,7 +135,7 @@ g_v2p(struct v_world * world, g_addr_t virt, unsigned int do_not_fault)
             V_ERR("Page fault: %lx no map, unimplemented",
                 (unsigned long) virt);
         }
-        h_deallocv(mpage->mfn << H_PAGE_SHIFT);
+        h_free_va(mpage->mfn << H_PAGE_SHIFT);
         return 0xffffffff;
     }
     l2 = v_page_make_present(mpage);
@@ -146,10 +146,10 @@ g_v2p(struct v_world * world, g_addr_t virt, unsigned int do_not_fault)
             world->status = VM_PAUSED;
             V_ERR("Page fault, unimplemented at l2 %x", *(unsigned int *) l2);
         }
-        h_deallocv(mpage->mfn << H_PAGE_SHIFT);
+        h_free_va(mpage->mfn << H_PAGE_SHIFT);
         return 0xffffffff;
     }
-    h_deallocv(mpage->mfn << H_PAGE_SHIFT);
+    h_free_va(mpage->mfn << H_PAGE_SHIFT);
     return ret;
 }
 
@@ -195,7 +195,7 @@ g_pagetable_map(struct v_world *world, g_addr_t virt)
             p = &((*p)->next);
         }
         if (!exist) {
-            newp = h_raw_malloc(sizeof(struct v_ptp_info));
+            newp = h_valloc(sizeof(struct v_ptp_info));
             p = &(mpage->ptp_list);
 
             newp->vaddr = (virt & H_PFN_MASK);
@@ -212,7 +212,7 @@ g_pagetable_map(struct v_world *world, g_addr_t virt)
         x = v_page_make_present(mpage);
         l1 = g_pt1_off((unsigned int) virt) + x;
         if ((*(unsigned int *) l1) & G_PAGE_PS) {
-            h_deallocv(mpage->mfn << H_PAGE_SHIFT);
+            h_free_va(mpage->mfn << H_PAGE_SHIFT);
             return;
         }
         if (!((*(unsigned int *) l1) & G_PAGE_P))
@@ -241,7 +241,7 @@ g_pagetable_map(struct v_world *world, g_addr_t virt)
             p = &((*p)->next);
         }
         if (!exist) {
-            newp = h_raw_malloc(sizeof(struct v_ptp_info));
+            newp = h_valloc(sizeof(struct v_ptp_info));
             p = &(mpage->ptp_list);
 
             newp->vaddr = (virt & H_PFN_MASK);

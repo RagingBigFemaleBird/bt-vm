@@ -49,7 +49,7 @@ h_world_init(struct v_world *world)
     world->pa_top += G_PA_BASE;
 
     for (i = 0; i < 32; i++) {
-        world->gregs.io_page[i] = h_raw_malloc(sizeof(struct v_page));
+        world->gregs.io_page[i] = h_valloc(sizeof(struct v_page));
         world->gregs.io_page[i]->has_virt = 0;
         world->gregs.io_page[i]->mfn = 0;
         world->gregs.io_page[i]->attr = V_PAGE_NOTPRESENT | V_PAGE_EXD;
@@ -66,9 +66,9 @@ h_relocate_npage(struct v_world *w)
 {
     struct v_spt_info *spt = w->spt_list;
     unsigned int oldnp = (unsigned int) (w->hregs.hcpu.switcher);
-    struct v_chunk *chunk = h_raw_palloc(0);
+    struct v_chunk *chunk = h_palloc(0);
     unsigned int phys = chunk->phys;
-    void *virt = h_allocv(phys);
+    void *virt = h_alloc_va(phys);
 
     h_memcpy(virt, w->hregs.hcpu.switcher, 4096);
 

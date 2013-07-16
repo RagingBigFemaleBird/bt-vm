@@ -57,7 +57,7 @@ g_tr_set_ip(struct v_world *world, unsigned long ip)
     void *virt;
 
     if (world->gregs.disasm_vip != 0) {
-        h_deallocv_virt(((unsigned int) world->gregs.disasm_vip) & H_PFN_MASK);
+        h_free_va_virt(((unsigned int) world->gregs.disasm_vip) & H_PFN_MASK);
     }
 
     mpage = h_p2mp(world, phys);

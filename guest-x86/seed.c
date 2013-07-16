@@ -1218,7 +1218,7 @@ g_seed_init(void)
 void *
 g_seed_initws(struct v_world *world)
 {
-    void *r = h_raw_malloc(sizeof(struct g_seed_ws));
+    void *r = h_valloc(sizeof(struct g_seed_ws));
     struct g_seed_ws *p = r;
     p->c_inst = 0;
     p->c_reg = 0;
@@ -1391,10 +1391,10 @@ g_seed_do_br(struct v_world *world, void *pws)
     }
     SEE_DEBUG("total %d conditional control instructions", ws->c_cbr);
     bytes = ws->c_cbr * ws->c_inst;     // 2 bits per branch, bit 1 T and bit 0 NT
-    ws->pbm = h_raw_malloc(bytes);
-    oldpbm = h_raw_malloc(bytes);
-    ws->l_cbr = h_raw_malloc(ws->c_cbr * sizeof(unsigned int));
-    graph = h_raw_malloc(ws->c_cbr * sizeof(struct pbm_graph));
+    ws->pbm = h_valloc(bytes);
+    oldpbm = h_valloc(bytes);
+    ws->l_cbr = h_valloc(ws->c_cbr * sizeof(unsigned int));
+    graph = h_valloc(ws->c_cbr * sizeof(struct pbm_graph));
     for (i = 0; i < bytes; i++) {
         ((unsigned char *) ws->pbm)[i] = 0;
         oldpbm[i] = 0;
@@ -1505,8 +1505,8 @@ g_seed_do_br(struct v_world *world, void *pws)
             printk("\n--");
         printk("%d:", ((unsigned char *) ws->pbm)[i]);
     }
-    h_raw_dealloc(graph);
-    h_raw_dealloc(oldpbm);
+    h_vfree(graph);
+    h_vfree(oldpbm);
 }
 
 static int

@@ -55,12 +55,12 @@ v_page_make_present(struct v_page *mpage)
         return mpage->virt;
     }
     if (mpage->attr & V_PAGE_NOTPRESENT) {
-        struct v_chunk *v = h_raw_palloc(0);
+        struct v_chunk *v = h_palloc(0);
         if (v == NULL) {
             V_ERR("page_make_present: Unrecoverable out of mem");
             return 0;
         }
-        virt = h_allocv(v->phys);
+        virt = h_alloc_va(v->phys);
         h_clear_page(virt);
         mpage->mfn = (v->phys >> H_PAGE_SHIFT);
         if ((mpage->attr & V_PAGE_TYPE_MASK) == 0)
@@ -72,7 +72,7 @@ v_page_make_present(struct v_page *mpage)
             (unsigned int) mpage->mfn);
         return virt;
     }
-    virt = h_allocv(mpage->mfn << H_PAGE_SHIFT);
+    virt = h_alloc_va(mpage->mfn << H_PAGE_SHIFT);
     mpage->has_virt = 1;
     mpage->virt = virt;
     return virt;
@@ -101,7 +101,7 @@ v_page_set_io(struct v_world *world, g_addr_t phys,
         return;
     }
     if (mpage->io_page_info == NULL) {
-        mpage->io_page_info = h_raw_malloc(sizeof(struct v_io_page_info));
+        mpage->io_page_info = h_valloc(sizeof(struct v_io_page_info));
     }
     if (mpage->io_page_info == NULL) {
         V_ERR("page_set_io: unrecoverable out of mem");
@@ -144,7 +144,7 @@ v_page_map(struct v_world *world, struct v_page *page, h_addr_t address)
         if (!exist) {
             V_VERBOSE("registered addr %lx -> %x", (unsigned long) address,
                 (unsigned int) page->mfn);
-            new_item = h_raw_malloc(sizeof(struct v_ptp_info));
+            new_item = h_valloc(sizeof(struct v_ptp_info));
             p = &(page->ptp_list);
             new_item->vaddr = address;
             new_item->spt = spt;
@@ -187,7 +187,7 @@ v_pagefault(struct v_world *world, g_addr_t address, int reason)
         if (mpage->attr & V_PAGE_NOTPRESENT) {
             V_LOG("allocating new page\n");
             v_page_make_present(mpage);
-            h_deallocv(mpage->mfn << H_PAGE_SHIFT);
+            h_free_va(mpage->mfn << H_PAGE_SHIFT);
         }
         mpage->attr = mpage->attr & (~V_PAGE_ACCESS_MASK);
         mpage->attr |= (g_attr & V_PAGE_PRIV_MASK);
@@ -279,7 +279,7 @@ v_pagefault(struct v_world *world, g_addr_t address, int reason)
 void
 v_spt_add(struct v_world *w, h_addr_t spt, g_addr_t gpt)
 {
-    struct v_spt_info *new_item = h_raw_malloc(sizeof(struct v_spt_info));
+    struct v_spt_info *new_item = h_valloc(sizeof(struct v_spt_info));
     int i;
     for (i = 0; i < V_MM_MAX_POOL; i++) {
         new_item->mem_pool_mapped[i] = 0;
@@ -346,7 +346,7 @@ v_spt_inv_page(struct v_world *world, struct v_page *mpage)
             if (!exist1) {
                 struct v_inv_entry **p = &(spt->inv_list);
                 struct v_inv_entry *new_item =
-                    h_raw_malloc(sizeof(struct v_inv_entry));
+                    h_valloc(sizeof(struct v_inv_entry));
                 V_VERBOSE("registered at spt %lx", spt->spt_paddr);
                 new_item->type = 0;
                 new_item->page = mpage;
@@ -365,8 +365,8 @@ void
 v_mem_pool_create(struct v_world *world, unsigned int unit_size,
     unsigned int order)
 {
-    struct v_chunk *chunk = h_raw_palloc(order);
-    void *virt = h_allocv(chunk->phys);
+    struct v_chunk *chunk = h_palloc(order);
+    void *virt = h_alloc_va(chunk->phys);
     unsigned int size = (H_PAGE_SIZE) * (1 << order);
     unsigned int count = size / unit_size;
     unsigned int bitmap_size = V_MM_POOL_BITMAP_SIZE(count);

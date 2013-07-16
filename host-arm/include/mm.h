@@ -50,21 +50,21 @@ struct h_chunk {
 unsigned int h_v2p(unsigned int);
 
 /* host raw memory allocator, returns virtual address, NULL if failed */
-void *h_raw_malloc(unsigned long size);
-void h_raw_dealloc(void *addr);
+void *h_valloc(unsigned long size);
+void h_vfree(void *addr);
 
 /* host raw memory page allocator, returns machine address, NULL if failed */
-struct v_chunk *h_raw_palloc(unsigned int order);
-void h_raw_depalloc(struct v_chunk *v);
+struct v_chunk *h_palloc(unsigned int order);
+void h_pfree(struct v_chunk *v);
 
 /* allocate/deallocate virtual page for the specific physical page */
-void *h_allocv(unsigned int phys);
-void h_deallocv(unsigned int phys);
-void h_deallocv_virt(unsigned int virt);
+void *h_alloc_va(unsigned int phys);
+void h_free_va(unsigned int phys);
+void h_free_va_virt(unsigned int virt);
 
 /* temporaryly allocate virtual page. the first address may fail as soon as the second call is made */
-void *h_allocv_temp(unsigned int phys);
-void *h_allocv_temp2(unsigned int phys);
+void *h_alloc_va_temp(unsigned int phys);
+void *h_alloc_va_temp2(unsigned int phys);
 
 /* set p2m mapping for the specified vm, p, length, m */
 void h_set_p2m(struct v_world *, h_addr_t, unsigned long, h_addr_t);

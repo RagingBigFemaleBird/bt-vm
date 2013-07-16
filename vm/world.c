@@ -32,14 +32,14 @@
 struct v_world *
 v_relocate_world(struct v_world *w)
 {
-    struct v_chunk *wc = h_raw_palloc(0);
-    struct v_world *world = h_allocv(wc->phys);
+    struct v_chunk *wc = h_palloc(0);
+    struct v_world *world = h_alloc_va(wc->phys);
     struct v_chunk v;
     v.order = 0;
     v.phys = h_v2p((h_addr_t) w);
     h_relocate_world(w, world);
     h_memcpy(world, w, sizeof(struct v_world));
-    h_raw_depalloc(&v);
+    h_pfree(&v);
     return world;
 }
 
@@ -50,10 +50,10 @@ v_relocate_world(struct v_world *w)
 struct v_world *
 v_create_world(unsigned long pages)
 {
-    struct v_chunk *trbase = h_raw_palloc(H_TRBASE_ORDER);
-    struct v_chunk *w = h_raw_palloc(0);
+    struct v_chunk *trbase = h_palloc(H_TRBASE_ORDER);
+    struct v_chunk *w = h_palloc(0);
     void *htrv;
-    struct v_world *world = h_allocv(w->phys);
+    struct v_world *world = h_alloc_va(w->phys);
     struct v_page *pg;
     unsigned long i;
 
@@ -62,13 +62,13 @@ v_create_world(unsigned long pages)
     v_disable_int(world);
     world->htrbase = (long int) (trbase->phys);
     for (i = 0; i < (1 << H_TRBASE_ORDER); i++) {
-        htrv = h_allocv(world->htrbase + i * H_PAGE_SIZE);
+        htrv = h_alloc_va(world->htrbase + i * H_PAGE_SIZE);
         h_clear_page(htrv);
-        h_deallocv(world->htrbase + i * H_PAGE_SIZE);
+        h_free_va(world->htrbase + i * H_PAGE_SIZE);
     }
     V_EVENT(">World created, TrBase = %lx, ", world->htrbase);
 
-    pg = h_raw_malloc(sizeof(struct v_page) * (pages));
+    pg = h_valloc(sizeof(struct v_page) * (pages));
 
     V_LOG("pagelist %p to %p, ", pg, pg + pages);
     for (i = 0; i < pages; i++) {
@@ -113,8 +113,8 @@ v_destroy_world(struct v_world *world)
     for (i = 0; i < world->pages; i++) {
     }
 */
-    h_raw_dealloc(world->page_list);
-//    h_raw_depalloc(&chunk);
+    h_vfree(world->page_list);
+//    h_pfree(&chunk);
 }
 
 /**

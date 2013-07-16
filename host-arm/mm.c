@@ -33,13 +33,13 @@
 #include <../arch/arm/include/asm/cacheflush.h>
 
 void *
-h_raw_malloc(unsigned long size)
+h_valloc(unsigned long size)
 {
     return kmalloc(size, GFP_ATOMIC);
 }
 
 void
-h_raw_dealloc(void *addr)
+h_vfree(void *addr)
 {
     kfree(addr);
 }
@@ -59,7 +59,7 @@ h_unpin(unsigned long phys)
 }
 
 struct v_chunk *
-h_raw_palloc(unsigned int order)
+h_palloc(unsigned int order)
 {
     struct page *p;
     struct v_chunk *v;
@@ -68,7 +68,7 @@ h_raw_palloc(unsigned int order)
     p = alloc_pages(GFP_ATOMIC, order);
     if (p == NULL)
         return NULL;
-    v = h_raw_malloc(sizeof(struct v_chunk));
+    v = h_valloc(sizeof(struct v_chunk));
     v->h.p = p;
     v->phys = page_to_phys(p);
     v->order = order;
@@ -79,7 +79,7 @@ h_raw_palloc(unsigned int order)
 }
 
 void
-h_raw_depalloc(struct v_chunk *v)
+h_pfree(struct v_chunk *v)
 {
     unsigned int pr;
     unsigned int phys;
@@ -90,21 +90,21 @@ h_raw_depalloc(struct v_chunk *v)
 }
 
 void *
-h_allocv(g_addr_t phys)
+h_alloc_va(g_addr_t phys)
 {
     V_VERBOSE("allocv for %x", phys);
     return kmap(phys_to_page(phys));
 }
 
 void
-h_deallocv(g_addr_t phys)
+h_free_va(g_addr_t phys)
 {
     V_VERBOSE("deallocv for %x", phys);
     kunmap(phys_to_page(phys));
 }
 
 void
-h_deallocv_virt(g_addr_t virt)
+h_free_va_virt(g_addr_t virt)
 {
     V_VERBOSE("deallocv for %x", virt_to_phys(virt));
     kunmap(phys_to_page(virt_to_phys((void *) (virt))));
@@ -224,7 +224,7 @@ unsigned int
 h_v2p(unsigned int virt)
 {
     void *l1 =
-        h_allocv(h_pt1_off((unsigned int) virt) +
+        h_alloc_va(h_pt1_off((unsigned int) virt) +
         (hostcpu.p15_trbase & H_PFN_MASK)) +
         (h_pt1_off((unsigned int) virt) & H_POFF_MASK);
     void *ls = l1;
@@ -235,24 +235,24 @@ h_v2p(unsigned int virt)
         unsigned int ret =
             (*(unsigned int *) l1 & 0xfff00000) + (virt & 0xfffff);
         if ((*(unsigned int *) l1) & H_PAGE_L1P) {
-            h_deallocv_virt((unsigned int) ls);
+            h_free_va_virt((unsigned int) ls);
             return 0;
         }
-        h_deallocv_virt((unsigned int) ls);
+        h_free_va_virt((unsigned int) ls);
         return ret;
     }
     if (!((*(unsigned int *) l1) & H_PAGE_L1P)) {
-        h_deallocv_virt((unsigned int) ls);
+        h_free_va_virt((unsigned int) ls);
         return 0;
     }
-    l2 = h_allocv(*(unsigned int *) l1) + ((*(unsigned int *) l1) & 0xc00);
+    l2 = h_alloc_va(*(unsigned int *) l1) + ((*(unsigned int *) l1) & 0xc00);
     l2 = l2 + h_pt2_off((unsigned int) virt);
     ret = (*(unsigned int *) l2 & H_PFN_MASK) + (virt & H_POFF_MASK);
     if (!((*(unsigned int *) l2) & H_PAGE_L2P)) {
-        h_deallocv(*(unsigned int *) l1 + ((*(unsigned int *) l1) & 0xc00));
+        h_free_va(*(unsigned int *) l1 + ((*(unsigned int *) l1) & 0xc00));
         return 0;
     }
-    h_deallocv(*(unsigned int *) l1 + ((*(unsigned int *) l1) & 0xc00));
+    h_free_va(*(unsigned int *) l1 + ((*(unsigned int *) l1) & 0xc00));
     V_LOG("l2@%x: %x", (unsigned int) l2, *(unsigned int *) l2);
     return ret;
 }
@@ -318,21 +318,21 @@ h_set_map(unsigned long trbase, unsigned long va, unsigned long pa,
     pa = pa & H_PFN_MASK;
     while (pages > 0) {
         unsigned int *l1 =
-            h_allocv(trbase + h_pt1_off(va)) +
+            h_alloc_va(trbase + h_pt1_off(va)) +
             (h_pt1_off((unsigned int) va) & H_POFF_MASK);
         unsigned int *ls = l1;
         unsigned int subpage = 0;       //(va >> 20) & 0x3;
         if ((*(l1 - subpage) & H_PAGE_L1P) == 0) {
-            struct v_chunk *c = h_raw_palloc(0);
-            void *l2v = h_allocv(c->phys);
+            struct v_chunk *c = h_palloc(0);
+            void *l2v = h_alloc_va(c->phys);
             h_clear_page(l2v);
             (*(l1 - subpage)) = h_pt1_format(c->phys, attr);
             h_dcache_clean((unsigned int) (l1 - subpage));
-            h_deallocv_virt((unsigned int) l2v);
+            h_free_va_virt((unsigned int) l2v);
         }
         if (((*l1) & H_PAGE_L1P) == 0) {
             unsigned int phys_big = (*(l1 - subpage)) & H_PFN_MASK;
-            void *l2v = h_allocv(phys_big) + (subpage << 10);
+            void *l2v = h_alloc_va(phys_big) + (subpage << 10);
             unsigned int *l2 = l2v + h_pt2_off(va);
             h_clear_pagetable(l2v);
             (*l1) = h_pt1_format(phys_big + (subpage << 10), attr);
@@ -341,18 +341,18 @@ h_set_map(unsigned long trbase, unsigned long va, unsigned long pa,
                 pa, l1, *l1, l2, *l2);
             h_dcache_clean((unsigned int) (l1));
             h_dcache_clean((unsigned int) (l2));
-            h_deallocv(phys_big);
+            h_free_va(phys_big);
         } else {
             unsigned int phys_big = (*(l1 - subpage)) & H_PFN_MASK;
-            void *l2v = h_allocv(phys_big) + (subpage << 10);
+            void *l2v = h_alloc_va(phys_big) + (subpage << 10);
             unsigned int *l2 = l2v + h_pt2_off(va);
             (*l2) = h_pt2_format(pa, attr);
             h_dcache_clean((unsigned int) (l2));
             V_LOG("mapping %lx to %lx, %px|l1 = %x, %px|l2= %x\n",
                 va, pa, l1, *l1, l2, *l2);
-            h_deallocv(*l1);
+            h_free_va(*l1);
         }
-        h_deallocv_virt((unsigned int) ls);
+        h_free_va_virt((unsigned int) ls);
         pages--;
         va += H_PAGE_SIZE;
         pa += H_PAGE_SIZE;
@@ -363,7 +363,7 @@ unsigned long
 h_get_map(unsigned long trbase, unsigned long virt)
 {
     void *l1 =
-        h_allocv(h_pt1_off((unsigned int) virt) + trbase) +
+        h_alloc_va(h_pt1_off((unsigned int) virt) + trbase) +
         (h_pt1_off((unsigned int) virt) & H_POFF_MASK);
     void *ls = l1;
     void *l2;
@@ -371,24 +371,24 @@ h_get_map(unsigned long trbase, unsigned long virt)
     if ((*(unsigned int *) l1) & H_PAGE_L1S) {
         unsigned int ret = *(unsigned int *) l1 & 0xfff00fff;
         if ((*(unsigned int *) l1) & H_PAGE_L1P) {
-            h_deallocv_virt((unsigned int) ls);
+            h_free_va_virt((unsigned int) ls);
             return 0;
         }
-        h_deallocv_virt((unsigned int) ls);
+        h_free_va_virt((unsigned int) ls);
         return ret;
     }
     if (!((*(unsigned int *) l1) & H_PAGE_L1P)) {
-        h_deallocv_virt((unsigned int) ls);
+        h_free_va_virt((unsigned int) ls);
         return 0;
     }
-    l2 = h_allocv(*(unsigned int *) l1) + ((*(unsigned int *) l1) & 0xc00);
+    l2 = h_alloc_va(*(unsigned int *) l1) + ((*(unsigned int *) l1) & 0xc00);
     l2 = l2 + h_pt2_off((unsigned int) virt);
     ret = *(unsigned int *) l2;
     if (!((*(unsigned int *) l2) & H_PAGE_L2P)) {
-        h_deallocv(*(unsigned int *) l1 + ((*(unsigned int *) l1) & 0xc00));
+        h_free_va(*(unsigned int *) l1 + ((*(unsigned int *) l1) & 0xc00));
         return 0;
     }
-    h_deallocv(*(unsigned int *) l1 + ((*(unsigned int *) l1) & 0xc00));
+    h_free_va(*(unsigned int *) l1 + ((*(unsigned int *) l1) & 0xc00));
     return ret;
 }
 
@@ -432,19 +432,19 @@ h_delete_trbase(struct v_world *world)
     v.phys = world->htrbase;
     for (i = 0; i < (1 << H_TRBASE_ORDER); i++) {
 
-        htrv = h_allocv(world->htrbase + i * H_PAGE_SIZE);
+        htrv = h_alloc_va(world->htrbase + i * H_PAGE_SIZE);
         for (j = 0; j < H_PAGE_SIZE; j += 4) {
             if ((*(unsigned int *) (htrv + j)) & 0x1) {
                 struct v_chunk v;
                 v.order = 0;
                 v.h.p = phys_to_page(*(unsigned int *) (htrv + j));
                 v.phys = *(unsigned int *) (htrv + j) & 0xfffff000;
-                h_raw_depalloc(&v);
+                h_pfree(&v);
             }
         }
-        h_deallocv(world->htrbase + i * H_PAGE_SIZE);
+        h_free_va(world->htrbase + i * H_PAGE_SIZE);
     }
-    h_raw_depalloc(&v);
+    h_pfree(&v);
 }
 
 void
@@ -468,18 +468,18 @@ h_inv_pagetable(struct v_world *world, struct v_spt_info *spt,
         world->hregs.hcpu.switcher;
     for (i = 0; i < (1 << H_TRBASE_ORDER); i++) {
 
-        htrv = h_allocv(spt->spt_paddr + i * H_PAGE_SIZE);
+        htrv = h_alloc_va(spt->spt_paddr + i * H_PAGE_SIZE);
         for (j = 0; j < H_PAGE_SIZE; j += 4) {
             if ((*(unsigned int *) (htrv + j)) & 0x1) {
                 struct v_chunk v;
                 v.order = 0;
                 v.h.p = phys_to_page(*(unsigned int *) (htrv + j));
                 v.phys = *(unsigned int *) (htrv + j) & 0xfffff000;
-                h_raw_depalloc(&v);
+                h_pfree(&v);
             }
         }
         h_clear_page(htrv);
-        h_deallocv(spt->spt_paddr + i * H_PAGE_SIZE);
+        h_free_va(spt->spt_paddr + i * H_PAGE_SIZE);
     }
     h_set_map(spt->spt_paddr, (long unsigned int) world,
         h_v2p((unsigned int) world), 1, V_PAGE_W | V_PAGE_VM);
@@ -506,13 +506,13 @@ h_inv_spt(struct v_world *world, struct v_spt_info *spt)
                     h_set_map(spt->spt_paddr, (*pl)->vaddr, 0, 1, V_PAGE_NOMAP);
                 else
                     h_inv_pagetable(world, spt, (*pl)->vaddr, (*pl)->gpt_level);
-                h_raw_dealloc((*pl));
+                h_vfree((*pl));
                 (*pl) = next;
             } else
                 pl = &((*pl)->next);
         }
         *p = (*p)->next;
-        h_raw_dealloc(psave);
+        h_vfree(psave);
     }
 }
 
@@ -529,13 +529,13 @@ h_new_trbase(struct v_world *world)
         (world->gregs.mode ==
         G_MODE_MMU) ? (world->gregs.p15_trbase & H_PFN_MASK) : 1;
     if ((spt = v_spt_get_by_gpt(world, p15)) == NULL) {
-        trbase = h_raw_palloc(H_TRBASE_ORDER);
+        trbase = h_palloc(H_TRBASE_ORDER);
         world->htrbase = (long int) (trbase->phys);
         V_EVENT("new base: %x from %x", world->htrbase, p15);
         for (i = 0; i < (1 << H_TRBASE_ORDER); i++) {
-            htrv = h_allocv(world->htrbase + i * H_PAGE_SIZE);
+            htrv = h_alloc_va(world->htrbase + i * H_PAGE_SIZE);
             h_clear_page(htrv);
-            h_deallocv(world->htrbase + i * H_PAGE_SIZE);
+            h_free_va(world->htrbase + i * H_PAGE_SIZE);
         }
         h_set_map(world->htrbase, (long unsigned int) world,
             h_v2p((unsigned int) world), 1, V_PAGE_W | V_PAGE_VM);
