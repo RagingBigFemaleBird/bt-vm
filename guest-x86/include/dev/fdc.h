@@ -55,10 +55,10 @@
 
 #define G_FDC_DMA_CHANNEL       0x2
 
-#define G_FDC_CHS_TO_BLOCK(x, y, z) ((x) * 0x12 * g_dev_floppy_density * 2 + (y) * 0x12 * g_dev_floppy_density + (z) - 1)
-#define G_FDC_BLOCK_TO_C(x) ((x) / (0x12 * g_dev_floppy_density * 2))
-#define G_FDC_BLOCK_TO_H(x) (((x) / (0x12 * g_dev_floppy_density)) % 2)
-#define G_FDC_BLOCK_TO_S(x) ((x) % (0x12 * g_dev_floppy_density) + 1)
+#define G_FDC_CHS_TO_BLOCK(x, y, z) ((x) * g_dev_floppy_param_s * g_dev_floppy_density * 2 + (y) * g_dev_floppy_param_s * g_dev_floppy_density + (z) - 1)
+#define G_FDC_BLOCK_TO_C(x) ((x) / (g_dev_floppy_param_s * g_dev_floppy_density * 2))
+#define G_FDC_BLOCK_TO_H(x) (((x) / (g_dev_floppy_param_s * g_dev_floppy_density)) % 2)
+#define G_FDC_BLOCK_TO_S(x) ((x) % (g_dev_floppy_param_s * g_dev_floppy_density) + 1)
 
 struct v_world;
 

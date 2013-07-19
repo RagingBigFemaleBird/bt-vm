@@ -30,6 +30,8 @@
 unsigned char *g_disk_data = NULL;
 unsigned long g_disk_length = 0;
 extern unsigned int g_dev_floppy_density;
+extern unsigned int g_dev_floppy_param_c;
+extern unsigned int g_dev_floppy_param_s;
 
 static int
 g_init_boot_sector(struct v_world *world, g_addr_t address)
@@ -369,6 +371,10 @@ g_do_io(struct v_world *world, unsigned int dir, unsigned int address,
             *(unsigned char *) param = 0xff;    /*try to curb any pci probing */
         }
         break;
+    /* todo: vga registers not handled, we are here just to silence the msg */
+    case 0x3d4:
+    case 0x3d5:
+        break;
     default:
       io_not_handled:
         V_ERR("unhandled IO %s port %x DATA=%x",
@@ -544,7 +550,7 @@ g_do_int(struct v_world *world, unsigned int param)
                 }
                 break;
             case 2:
-                if ((world->hregs.gcpu.ecx & 0xff) > 18 * g_dev_floppy_density) {       // linux way of probing disk geometry...
+                if ((world->hregs.gcpu.ecx & 0xff) > g_dev_floppy_param_s * g_dev_floppy_density) {       // linux way of probing disk geometry...
                     world->hregs.gcpu.eflags |= H_EFLAGS_CF;
                     break;
                 }
@@ -554,9 +560,9 @@ g_do_int(struct v_world *world, unsigned int param)
                 drive = (world->hregs.gcpu.edx & 0xff);
                 block =
                     ((world->hregs.gcpu.ecx & 0xff00) >> 8) *
-                    36 * g_dev_floppy_density +
+                    g_dev_floppy_param_s * 2 * g_dev_floppy_density +
                     ((world->hregs.gcpu.edx & 0xff00) >> 8) *
-                    18 * g_dev_floppy_density + (world->hregs.gcpu.ecx & 0xff) -
+                    g_dev_floppy_param_s * g_dev_floppy_density + (world->hregs.gcpu.ecx & 0xff) -
                     1;
                 world->hregs.gcpu.eflags &= (~H_EFLAGS_CF);
                 while (to_read > 0) {

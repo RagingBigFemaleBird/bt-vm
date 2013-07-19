@@ -287,6 +287,8 @@ extern unsigned int bpaddr;
 extern int usermode_tests_reset;
 #ifdef CONFIG_X86
 extern unsigned int g_dev_floppy_density;
+extern unsigned int g_dev_floppy_param_c;
+extern unsigned int g_dev_floppy_param_s;
 #endif
 
 #ifdef CONFIG_X86
@@ -388,7 +390,9 @@ btc_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 #ifdef CONFIG_X86
         g_disk_data = NULL;
         g_disk_length = 0;
-        g_dev_floppy_density = 5;
+        g_dev_floppy_density = 1;
+        g_dev_floppy_param_c = 254;
+        g_dev_floppy_param_s = 90;
         g_fdc_eject(w_list);
         len = 0;
         ret = 0;

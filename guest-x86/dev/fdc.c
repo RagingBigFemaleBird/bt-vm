@@ -27,6 +27,8 @@
 extern unsigned char *g_disk_data;
 
 unsigned int g_dev_floppy_density = 2;
+unsigned int g_dev_floppy_param_c = 80;
+unsigned int g_dev_floppy_param_s = 18;
 
 static void
 g_fdc_run_cmd(struct v_world *world)
