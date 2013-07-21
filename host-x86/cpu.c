@@ -2862,6 +2862,10 @@ h_gpfault(struct v_world *world)
             V_ALERT("mov into dr");
             world->hregs.gcpu.eip += 3;
             break;
+        } else if ((unsigned int) (*(inst + 1)) == 0x21) {
+            V_ALERT("mov from dr");
+            world->hregs.gcpu.eip += 3;
+            break;
         } else if ((unsigned int) (*(inst + 1)) == 0x00) {
             if (((unsigned int) (*(inst + 2)) & 0xf8) == 0xd8) {
                 int reg = (unsigned int) (*(inst + 2)) & 0x7;
