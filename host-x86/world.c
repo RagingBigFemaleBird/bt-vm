@@ -169,10 +169,10 @@ h_world_init(struct v_world *world)
     world->hregs.hcpu.switcher = h_switcher;
     world->total_tsc = world->last_tsc = 0;
     table = h_palloc(0);
-    world->hregs.fpu = h_alloc_va(table->phys);
+/*    world->hregs.fpu = h_alloc_va(table->phys);
     asm volatile ("fxsave (%0)"::"r" (world->hregs.fpu + 512));
     world->hregs.fpusaved = 0;
-
+*/
     V_ERR("tables at %x, phys %llx\n", world->hregs.gcpu.gdt.base,
         (unsigned long long) h_v2p(world->hregs.gcpu.idt.base));
     h_set_map(world->htrbase, (h_addr_t) world->hregs.gcpu.idt.base,

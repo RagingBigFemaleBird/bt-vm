@@ -60,6 +60,7 @@ struct v_world {
     unsigned int relocate;
     struct v_mem_pool host_pools[V_MM_MAX_POOL];
     unsigned int pool_count;
+    unsigned int fpu_used;
 #ifdef BT_CACHE
     struct lru_cache *pb_cache;
 #endif

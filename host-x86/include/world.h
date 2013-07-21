@@ -28,9 +28,8 @@ struct v_world;
 struct h_regs {
     struct h_cpu hcpu;
     struct h_cpu gcpu;
-    void *fpu;
-    int fpusaved;
 };
+
 struct h_map {
 };
 

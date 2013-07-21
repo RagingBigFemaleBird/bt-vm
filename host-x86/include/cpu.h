@@ -149,6 +149,7 @@ struct h_cpu {
     unsigned int dr7;
     void (*switcher) (unsigned long trbase, struct v_world * w);
     unsigned int page_fault_addr;
+    unsigned char fpu_save[512] __attribute__ ((aligned (0x10)));
 
 } __attribute__ ((__packed__));
 
@@ -166,4 +167,7 @@ void h_inject_int(struct v_world *, unsigned int);
 void h_gpfault(struct v_world *);
 void h_do_fail_inst(struct v_world *, unsigned long);
 void monitor_fault_entry_check(void);
+void h_save_fpu(struct v_world *);
+void h_restore_fpu(struct v_world *);
+
 #endif

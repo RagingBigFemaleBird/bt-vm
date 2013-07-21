@@ -371,7 +371,7 @@ g_do_io(struct v_world *world, unsigned int dir, unsigned int address,
             *(unsigned char *) param = 0xff;    /*try to curb any pci probing */
         }
         break;
-    /* todo: vga registers not handled, we are here just to silence the msg */
+        /* todo: vga registers not handled, we are here just to silence the msg */
     case 0x3d4:
     case 0x3d5:
         break;
@@ -550,7 +550,7 @@ g_do_int(struct v_world *world, unsigned int param)
                 }
                 break;
             case 2:
-                if ((world->hregs.gcpu.ecx & 0xff) > g_dev_floppy_param_s * g_dev_floppy_density) {       // linux way of probing disk geometry...
+                if ((world->hregs.gcpu.ecx & 0xff) > g_dev_floppy_param_s * g_dev_floppy_density) {     // linux way of probing disk geometry...
                     world->hregs.gcpu.eflags |= H_EFLAGS_CF;
                     break;
                 }
@@ -562,8 +562,8 @@ g_do_int(struct v_world *world, unsigned int param)
                     ((world->hregs.gcpu.ecx & 0xff00) >> 8) *
                     g_dev_floppy_param_s * 2 * g_dev_floppy_density +
                     ((world->hregs.gcpu.edx & 0xff00) >> 8) *
-                    g_dev_floppy_param_s * g_dev_floppy_density + (world->hregs.gcpu.ecx & 0xff) -
-                    1;
+                    g_dev_floppy_param_s * g_dev_floppy_density +
+                    (world->hregs.gcpu.ecx & 0xff) - 1;
                 world->hregs.gcpu.eflags &= (~H_EFLAGS_CF);
                 while (to_read > 0) {
                     V_LOG(" READ block %x to %x:\n", block, addr);

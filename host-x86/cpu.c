@@ -151,6 +151,23 @@ h_cpu_save(struct v_world *w)
         h_set_bp(w, bpaddr, 3);*/
 }
 
+void
+h_save_fpu(struct v_world *w)
+{
+    w->fpu_used = 1;
+    asm volatile ("fxsave %[fx]":[fx] "=m"(w->hregs.hcpu.fpu_save[0]));
+    asm volatile ("fxrstor %[fx]":[fx] "=m"(w->hregs.gcpu.fpu_save[0]));
+}
+
+void
+h_restore_fpu(struct v_world *w)
+{
+    if (w->fpu_used) {
+        asm volatile ("fxsave %[fx]":[fx] "=m"(w->hregs.gcpu.fpu_save[0]));
+        asm volatile ("fxrstor %[fx]":[fx] "=m"(w->hregs.hcpu.fpu_save[0]));
+    }
+}
+
 #ifdef BT_CACHE
 
 #define __TOTAL 0
@@ -856,7 +873,7 @@ h_switcher(unsigned long trbase, struct v_world *w)
     h_addr_t tr = (h_addr_t) trbase;
     struct h_regs *h = &w->hregs;
     asm volatile ("cli");
-    if (h->fpusaved) {
+    if (w->fpu_used && !(w->gregs.cr0 & H_CR0_TS)) {
         asm volatile ("clts");
     } else {
         asm volatile ("movl %0, %%cr0"::"r" (h->hcpu.cr0 | H_CR0_TS));
@@ -1169,8 +1186,13 @@ h_switch_to(unsigned long trbase, struct v_world *w)
         return 1;
     } else if ((h->gcpu.intr & 0xff) == 0x07) {
         V_ALERT("FPU");
-        h->fpusaved = 1;
-        v_bt_reset(w);
+        if (!w->fpu_used) {
+            h_save_fpu(w);
+        } else {
+            w->gregs.has_errorc = 0;
+            h_inject_int(w, 0x07);
+        }
+//        v_bt_reset(w);
         return 1;
     } else if ((h->gcpu.intr & 0xff) == 0x0d) {
         v_perf_inc(V_PERF_PI, 1);
@@ -1218,9 +1240,6 @@ h_switch_to(unsigned long trbase, struct v_world *w)
     if ((h->gcpu.intr & 0xff) >= 0x20)
         h_do_int(h->gcpu.intr & 0xff);
 
-    if (h->fpusaved) {
-        h->fpusaved = 0;
-    }
     return 0;
 }
 

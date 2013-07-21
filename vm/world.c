@@ -125,6 +125,7 @@ int
 v_switch_to(struct v_world *world)
 {
     h_cpu_save(world);
+    world->fpu_used = 0;
     do {
         if (g_in_priv(world)) {
             if (world->poi == NULL) {
@@ -140,6 +141,7 @@ v_switch_to(struct v_world *world)
         }
     } while (world->npage(world->htrbase, world)
         && (world->status == VM_RUNNING));
+    h_restore_fpu(world);
     return 0;
 }
 
