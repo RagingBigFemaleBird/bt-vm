@@ -2892,7 +2892,8 @@ h_gpfault(struct v_world *world)
                     }
                     h_new_trbase(world);
                 }
-                if (newmode & H_CR0_TS) V_ERR("TS set");
+                if (newmode & H_CR0_TS) world->gregs.nt = 1;
+                else world->gregs.nt = 0;
                 world->gregs.cr0 = newmode;
             } else if (cr == 0xd0) {
                 if (0 != world->gregs.ring) {
@@ -2966,6 +2967,7 @@ h_gpfault(struct v_world *world)
                 world->status = VM_PAUSED;
             } else {
                 world->gregs.nt = 0;
+                world->gregs.cr0 &= ~(H_CR0_TS);
                 world->hregs.gcpu.eip += 2;
             }
             break;
