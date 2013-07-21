@@ -39,6 +39,9 @@
 #define H_EFLAGS_IOPL_MASK	(3 << 12)
 
 #define H_CR0_WP        (1 << 16)
+#define H_CR0_TS	(1 << 3)
+#define H_CR0_EM	(1 << 2)
+#define H_CR0_MP	(1 << 1)
 
 #define H_CR4_PGE       (1 << 7)
 #define H_CR4_PAE       (1 << 5)
@@ -50,7 +53,6 @@
 #define H_DR7_GD	(1 << 13)
 #define H_DR7_ALLINST   (0)
 
-#define H_CR0_TS	(1 << 3)
 
 #define MSR_EFER        0xc0000080
 #define MSR_EFER_NX     (1 << 11)

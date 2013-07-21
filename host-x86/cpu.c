@@ -874,9 +874,9 @@ h_switcher(unsigned long trbase, struct v_world *w)
     struct h_regs *h = &w->hregs;
     asm volatile ("cli");
     if (w->fpu_used && !(w->gregs.cr0 & H_CR0_TS)) {
-        asm volatile ("clts");
+        asm volatile ("movl %0, %%cr0"::"r" ((h->hcpu.cr0 & (~H_CR0_TS)) & (~H_CR0_MP)));
     } else {
-        asm volatile ("movl %0, %%cr0"::"r" (h->hcpu.cr0 | H_CR0_TS));
+        asm volatile ("movl %0, %%cr0"::"r" ((h->hcpu.cr0 | H_CR0_TS) & (~H_CR0_MP)));
     }
     asm volatile ("movl %0, %%dr7"::"r" (w->hregs.gcpu.dr7));
     asm volatile ("movl %0, %%dr0"::"r" (w->hregs.gcpu.dr0));
@@ -1067,6 +1067,37 @@ h_switcher(unsigned long trbase, struct v_world *w)
     return;
 }
 
+static int
+handle_priv_fpu(struct v_world *w)
+{
+    unsigned char bound[20];
+    unsigned int g_ip = g_get_ip(w);
+    unsigned char *inst;
+    h_read_guest(w, g_ip, (unsigned int *) &bound[0]);
+    h_read_guest(w, g_ip + 4, (unsigned int *) &bound[4]);
+    h_read_guest(w, g_ip + 8, (unsigned int *) &bound[8]);
+    h_read_guest(w, g_ip + 12, (unsigned int *) &bound[12]);
+    inst = (unsigned char *) &bound;
+    if ((unsigned int) (*(inst + 0)) == 0x0f
+        && (unsigned int) (*(inst + 1)) == 0xae) {
+        if ((unsigned int) (*(inst + 2)) == 0x2f) {
+            V_ERR("fxstor edi, ignoring");
+            w->hregs.gcpu.eip += 3;
+            return 1;
+        } else if ((unsigned int) (*(inst + 2)) == 0x27) {
+            V_ERR("fxsave edi, ignoring");
+            w->hregs.gcpu.eip += 3;
+            return 1;
+        } else {
+            V_ERR("Unknown priv fpu inst 0f2e%x", (unsigned int) (*(inst + 2)));
+            w->status = VM_PAUSED;
+        }
+        w->hregs.gcpu.eip += 3;
+    }
+    return 0;
+}
+
+
 int
 h_switch_to(unsigned long trbase, struct v_world *w)
 {
@@ -1189,8 +1220,11 @@ h_switch_to(unsigned long trbase, struct v_world *w)
         if (!w->fpu_used) {
             h_save_fpu(w);
         } else {
-            w->gregs.has_errorc = 0;
-            h_inject_int(w, 0x07);
+            if (!handle_priv_fpu(w)) {
+                V_ERR("Injecting FPU faults!");
+                w->gregs.has_errorc = 0;
+                h_inject_int(w, 0x07);
+            }
         }
 //        v_bt_reset(w);
         return 1;
@@ -2745,9 +2779,25 @@ h_gpfault(struct v_world *world)
                 V_EVENT("CPU returns with %x, %x, %x, %x, require fixing", ret0,
                     ret1, ret2, ret3);
                 ret2 &= ~(1 << 5);      //VMX
+                ret2 &= ~(1 << 3);      //MONITOR
+                ret2 &= ~(1 << 6);      //SMX
+                ret2 &= ~(1 << 7);      //EIST
+                ret2 &= ~(1 << 8);      //TM2
+                ret2 &= ~(1 << 10);     //CNTX-ID
+                ret2 &= ~(1 << 12);     //FMA
+                ret2 &= ~(1 << 14);     //xTPR
+                ret2 &= ~(1 << 15);     //PDCM
+                ret2 &= ~(1 << 17);     //PCID
+                ret2 &= ~(1 << 21);     //x2APIC
+                ret2 &= ~(1 << 26);     //XSAVE
+                ret2 &= ~(1 << 27);     //OSXSAVE
                 ret3 &= ~(1 << 9);      //On board APIC
                 ret3 &= ~(1 << 11);     //SEP
                 ret3 &= ~(1 << 16);     //PAT
+                ret3 &= ~(1 << 22);     //ACPI
+                ret3 &= ~(1 << 24);     //FXSR
+                ret3 &= ~(1 << 28);     //HTT
+                ret3 &= ~(1 << 29);     //TM
             }
             V_EVENT("Returning with %x, %x, %x, %x", ret0, ret1, ret2, ret3);
             world->hregs.gcpu.eax = ret0;
@@ -2842,6 +2892,7 @@ h_gpfault(struct v_world *world)
                     }
                     h_new_trbase(world);
                 }
+                if (newmode & H_CR0_TS) V_ERR("TS set");
                 world->gregs.cr0 = newmode;
             } else if (cr == 0xd0) {
                 if (0 != world->gregs.ring) {
