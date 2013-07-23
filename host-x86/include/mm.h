@@ -58,7 +58,8 @@ void *h_valloc(unsigned long size);
 void h_vfree(void *addr);
 
 /* host raw memory page allocator, returns machine address, NULL if failed */
-struct v_chunk *h_palloc(unsigned int order);
+struct v_chunk *h_palloc(unsigned int);
+struct v_chunk *h_palloc_zone(unsigned int, unsigned int);
 void h_pfree(struct v_chunk *v);
 
 /* allocate/deallocate virtual page for the specific physical page */

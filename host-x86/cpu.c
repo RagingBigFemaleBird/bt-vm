@@ -155,16 +155,16 @@ void
 h_save_fpu(struct v_world *w)
 {
     w->fpu_used = 1;
-//    asm volatile ("fxsave %[fx]":[fx] "=m"(w->hregs.hcpu.fpu_save[0]));
-//    asm volatile ("fxrstor %[fx]":[fx] "=m"(w->hregs.gcpu.fpu_save[0]));
+    asm volatile ("fxsave %[fx]":[fx] "=m"(w->hregs.hcpu.fpu_save[0]));
+    asm volatile ("fxrstor %[fx]":[fx] "=m"(w->hregs.gcpu.fpu_save[0]));
 }
 
 void
 h_restore_fpu(struct v_world *w)
 {
     if (w->fpu_used) {
-//        asm volatile ("fxsave %[fx]":[fx] "=m"(w->hregs.gcpu.fpu_save[0]));
-//        asm volatile ("fxrstor %[fx]":[fx] "=m"(w->hregs.hcpu.fpu_save[0]));
+        asm volatile ("fxsave %[fx]":[fx] "=m"(w->hregs.gcpu.fpu_save[0]));
+        asm volatile ("fxrstor %[fx]":[fx] "=m"(w->hregs.hcpu.fpu_save[0]));
     }
 }
 
@@ -876,9 +876,11 @@ h_switcher(unsigned long trbase, struct v_world *w)
     struct h_regs *h = &w->hregs;
     asm volatile ("cli");
     if (w->fpu_used && !(w->gregs.cr0 & H_CR0_TS)) {
-        asm volatile ("movl %0, %%cr0"::"r" ((h->hcpu.cr0 & (~H_CR0_TS)) & (~H_CR0_MP)));
+        asm volatile ("movl %0, %%cr0"::"r" ((h->
+                    hcpu.cr0 & (~H_CR0_TS)) & (~H_CR0_MP)));
     } else {
-        asm volatile ("movl %0, %%cr0"::"r" ((h->hcpu.cr0 | H_CR0_TS) & (~H_CR0_MP)));
+        asm volatile ("movl %0, %%cr0"::"r" ((h->
+                    hcpu.cr0 | H_CR0_TS) & (~H_CR0_MP)));
     }
     asm volatile ("movl %0, %%dr7"::"r" (w->hregs.gcpu.dr7));
     asm volatile ("movl %0, %%dr0"::"r" (w->hregs.gcpu.dr0));
@@ -1075,7 +1077,8 @@ handle_priv_fpu(struct v_world *w)
     unsigned char bound[20];
     unsigned int g_ip = g_get_ip(w);
     unsigned char *inst;
-    if (w->gregs.ring > 0) return 0;
+    if (w->gregs.ring > 0)
+        return 0;
     h_read_guest(w, g_ip, (unsigned int *) &bound[0]);
     h_read_guest(w, g_ip + 4, (unsigned int *) &bound[4]);
     h_read_guest(w, g_ip + 8, (unsigned int *) &bound[8]);
@@ -1479,7 +1482,7 @@ h_new_trbase(struct v_world *world)
     int i;
     unsigned int cr3 = (world->gregs.mode == G_MODE_PG) ? world->gregs.cr3 : 1;
     if ((spt = v_spt_get_by_gpt(world, cr3)) == NULL) {
-        trbase = h_palloc(H_TRBASE_ORDER);
+        trbase = h_palloc_zone(H_TRBASE_ORDER, V_MM_ALLOC_ZONE_LOW);
         world->htrbase = (unsigned long) (trbase->phys);
         V_EVENT("new base: %lx from %x", world->htrbase, cr3);
         for (i = 0; i < (1 << H_TRBASE_ORDER); i++) {
@@ -2782,7 +2785,6 @@ h_gpfault(struct v_world *world)
                 V_EVENT("CPU returns with %x, %x, %x, %x, require fixing", ret0,
                     ret1, ret2, ret3);
                 ret2 &= ~(1 << 5);      //VMX
-                ret2 &= ~(1 << 3);      //MONITOR
                 ret2 &= ~(1 << 6);      //SMX
                 ret2 &= ~(1 << 7);      //EIST
                 ret2 &= ~(1 << 8);      //TM2
@@ -2897,8 +2899,6 @@ h_gpfault(struct v_world *world)
                     }
                     h_new_trbase(world);
                 }
-                if (newmode & H_CR0_TS) world->gregs.nt = 1;
-                else world->gregs.nt = 0;
                 world->gregs.cr0 = newmode;
             } else if (cr == 0xd0) {
                 if (0 != world->gregs.ring) {
@@ -2971,7 +2971,6 @@ h_gpfault(struct v_world *world)
                 V_LOG("Guest GP Fault, clts");
                 world->status = VM_PAUSED;
             } else {
-                world->gregs.nt = 0;
                 world->gregs.cr0 &= ~(H_CR0_TS);
                 world->hregs.gcpu.eip += 2;
             }

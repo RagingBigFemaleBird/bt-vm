@@ -50,7 +50,7 @@ v_relocate_world(struct v_world *w)
 struct v_world *
 v_create_world(unsigned long pages)
 {
-    struct v_chunk *trbase = h_palloc(H_TRBASE_ORDER);
+    struct v_chunk *trbase = h_palloc_zone(H_TRBASE_ORDER, V_MM_ALLOC_ZONE_LOW);
     struct v_chunk *w = h_palloc(0);
     void *htrv;
     struct v_world *world = h_alloc_va(w->phys);

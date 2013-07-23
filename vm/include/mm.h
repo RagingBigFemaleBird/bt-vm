@@ -52,6 +52,10 @@
 
 #define V_MM_POOL_BITMAP_SIZE(count) ((((count) / 8 + 1) & 0xfffffffc) + 4)
 
+#define V_MM_ALLOC_ZONE_ALL 0
+#define V_MM_ALLOC_ZONE_LOW 1
+#define V_MM_ALLOC_ZONE_DMA 2
+
 struct v_mem_pool {
     h_addr_t virt;
     h_addr_t phys;
