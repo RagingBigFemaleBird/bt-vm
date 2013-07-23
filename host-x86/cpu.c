@@ -155,16 +155,16 @@ void
 h_save_fpu(struct v_world *w)
 {
     w->fpu_used = 1;
-    asm volatile ("fxsave %[fx]":[fx] "=m"(w->hregs.hcpu.fpu_save[0]));
-    asm volatile ("fxrstor %[fx]":[fx] "=m"(w->hregs.gcpu.fpu_save[0]));
+//    asm volatile ("fxsave %[fx]":[fx] "=m"(w->hregs.hcpu.fpu_save[0]));
+//    asm volatile ("fxrstor %[fx]":[fx] "=m"(w->hregs.gcpu.fpu_save[0]));
 }
 
 void
 h_restore_fpu(struct v_world *w)
 {
     if (w->fpu_used) {
-        asm volatile ("fxsave %[fx]":[fx] "=m"(w->hregs.gcpu.fpu_save[0]));
-        asm volatile ("fxrstor %[fx]":[fx] "=m"(w->hregs.hcpu.fpu_save[0]));
+//        asm volatile ("fxsave %[fx]":[fx] "=m"(w->hregs.gcpu.fpu_save[0]));
+//        asm volatile ("fxrstor %[fx]":[fx] "=m"(w->hregs.hcpu.fpu_save[0]));
     }
 }
 
@@ -632,10 +632,12 @@ h_gp_fault_quickpath_postprocessing2(struct v_world *world)
     result = *((unsigned int *) (cache));
     if (result == 2) {
         int interrupt = *((unsigned int *) (cache + 20));
+/*
         if (interrupt) {
             if (!(world->hregs.gcpu.eflags & H_EFLAGS_TF))
                 g_pic_serve(world);
         }
+*/
     }
 }
 #endif
@@ -1073,6 +1075,7 @@ handle_priv_fpu(struct v_world *w)
     unsigned char bound[20];
     unsigned int g_ip = g_get_ip(w);
     unsigned char *inst;
+    if (w->gregs.ring > 0) return 0;
     h_read_guest(w, g_ip, (unsigned int *) &bound[0]);
     h_read_guest(w, g_ip + 4, (unsigned int *) &bound[4]);
     h_read_guest(w, g_ip + 8, (unsigned int *) &bound[8]);
@@ -1266,7 +1269,7 @@ h_switch_to(unsigned long trbase, struct v_world *w)
         if (!(h->gcpu.eflags & H_EFLAGS_TF))
             g_pic_serve(w);
     } else {
-        V_LOG("Warning int %x not received by host.\n", h->gcpu.intr & 0xff);
+        V_LOG("Host Interrupt %x\n", h->gcpu.intr & 0xff);
         if (!(h->gcpu.eflags & H_EFLAGS_TF))
             g_pic_serve(w);
     }
@@ -2861,6 +2864,8 @@ h_gpfault(struct v_world *world)
                     if ((!(newmode & 0x80000000))
                         && (newmode & 0x1)) {
                         if (world->gregs.mode == G_MODE_REAL) {
+                            world->gregs.cstrue = 0;
+                            world->gregs.cshigh = 0;
                             //we just entered PE from REAL, fake selectors
                             world->gregs.zombie_cs = world->hregs.gcpu.cs;
                             world->gregs.zombie_ss = world->hregs.gcpu.ss;

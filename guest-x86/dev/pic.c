@@ -37,6 +37,18 @@ g_pic_init(struct v_world *w)
     w->gregs.dev.pic.d1IRQ = 0xa0;
 }
 
+static void
+g_pic_trigger_timer(struct v_world *w)
+{
+    if (w->gregs.dev.pic.expected_jiffies + 0x2000000LL > w->total_tsc) {
+        return;
+    }
+    w->status = VM_RUNNING;
+    V_LOG("Passed timer check");
+    g_pic_trigger(w, G_PIC_TIMER_INT);
+    w->gregs.dev.pic.expected_jiffies = w->total_tsc;
+}
+
 void
 g_pic_serve(struct v_world *w)
 {
@@ -62,18 +74,12 @@ g_pic_serve(struct v_world *w)
         h_inject_int(w, w->gregs.dev.pic.d0IRQ + G_PIC_FDC_INT);
         return;
     }
-    if (w->gregs.dev.pic.expected_jiffies + 0x2000000LL > w->total_tsc) {
-        return;
-    }
-    w->status = VM_RUNNING;
+    g_pic_trigger_timer(w);
     if (w->gregs.mode != G_MODE_REAL /* note: hack */  &&
         v_int_enabled(w) && (!(w->gregs.dev.pic.d0IRQ_mask & G_PIC_TIMER))
-/*
         && (w->gregs.dev.pic.d0IRQ_req & G_PIC_TIMER)
-*/
         && (!(w->gregs.dev.pic.d0IRQ_srv))) {
         V_EVENT("trigger timer interrupt");
-        w->gregs.dev.pic.expected_jiffies = w->total_tsc;
         w->gregs.dev.pic.d0IRQ_srv |= G_PIC_TIMER;
         w->gregs.has_errorc = 0;
         h_inject_int(w, w->gregs.dev.pic.d0IRQ + G_PIC_TIMER_INT);
