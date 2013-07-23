@@ -644,8 +644,8 @@ g_do_int(struct v_world *world, unsigned int param)
                 world->hregs.gcpu.eax = 0x8600;
                 break;
             case 0x88:
-                world->hregs.gcpu.eflags &= ~(H_EFLAGS_CF);     /* return 16MB */
-                world->hregs.gcpu.eax = G_CONFIG_MEM_PAGES / 4 - 1024;
+                world->hregs.gcpu.eflags &= ~(H_EFLAGS_CF);
+                world->hregs.gcpu.eax = G_CONFIG_MEM_PAGES * 4 - 1024;
                 V_ALERT("INT: Get memory map, 80");
                 break;
             case 0xe9:
@@ -663,7 +663,7 @@ g_do_int(struct v_world *world, unsigned int param)
                     world->hregs.gcpu.eflags &= (~H_EFLAGS_CF);
                     err |= h_write_guest(world, addr, 0);
                     err |= h_write_guest(world, addr + 4, 0);
-                    err |= h_write_guest(world, addr + 8, G_CONFIG_MEM_PAGES << 12);    /* return 16MB */
+                    err |= h_write_guest(world, addr + 8, G_CONFIG_MEM_PAGES << 12);
                     err |= h_write_guest(world, addr + 12, 0);
                     err |= h_write_guest(world, addr + 16, 0);
                     if (err) {
@@ -691,7 +691,7 @@ g_do_int(struct v_world *world, unsigned int param)
             break;
         case 0x12:
             V_EVENT("get memory size");
-            world->hregs.gcpu.eax = G_CONFIG_MEM_PAGES / 4;     /*return 16MB */
+            world->hregs.gcpu.eax = G_CONFIG_MEM_PAGES / 4;
             break;
         default:
             world->status = VM_PAUSED;
