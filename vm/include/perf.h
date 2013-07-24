@@ -38,8 +38,11 @@
 #define V_PERF_EVICT 10
 #define V_PERF_CONFLICT 11
 #define V_PERF_FULL 12
+#define V_PERF_PB_FAIL_OTHER 13
+#define V_PERF_PB_FAIL_CACHE 14
+#define V_PERF_PB_FAIL_PLAN 15
 
-#define V_PERF_COUNT 13
+#define V_PERF_COUNT 16
 void v_perf_inc(int, long);
 void v_perf_init(void);
 long v_perf_get(int);

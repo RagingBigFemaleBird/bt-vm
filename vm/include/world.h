@@ -61,6 +61,9 @@ struct v_world {
     struct v_mem_pool host_pools[V_MM_MAX_POOL];
     unsigned int pool_count;
     unsigned int fpu_used;
+    unsigned int monitor_fault;
+    unsigned int pb_fail_reason;
+    unsigned int bpc;
 #ifdef BT_CACHE
     struct lru_cache *pb_cache;
 #endif

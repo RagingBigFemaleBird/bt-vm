@@ -568,8 +568,6 @@ v_poi_run_coverage(struct v_poi_tree *tree, int i, int count)
     return 0;
 }
 
-static int bpc;
-
 static int
 v_poi_tree_set_bps(struct v_world *world, struct v_poi_tree *tree, int i,
     int count, int bps)
@@ -597,22 +595,22 @@ v_poi_tree_set_bps(struct v_world *world, struct v_poi_tree *tree, int i,
             ASSERT(bps >= 1);
             tree[i].poi->tree = tree;
             tree[i].poi->tree_count = count;
-            v_set_bp(world, tree[i].poi, bpc);
-            bpc++;
+            v_set_bp(world, tree[i].poi, world->bpc);
+            world->bpc++;
             return 1;
         } else if (tree[i].poi->type & V_INST_F) {
             ASSERT(bps >= 1);
             tree[i].poi->tree = tree;
             tree[i].poi->tree_count = count;
-            v_set_bp(world, tree[i].poi, bpc);
-            bpc++;
+            v_set_bp(world, tree[i].poi, world->bpc);
+            world->bpc++;
             return 1;
         } else if (tree[i].poi->type & V_INST_U) {
             ASSERT(bps >= 1);
             tree[i].poi->tree = tree;
             tree[i].poi->tree_count = count;
-            v_set_bp(world, tree[i].poi, bpc);
-            bpc++;
+            v_set_bp(world, tree[i].poi, world->bpc);
+            world->bpc++;
             return 1;
         } else if (tree[i].poi->type & V_INST_CB) {
             int k = 0, incomplete_left = 0;
@@ -624,8 +622,8 @@ v_poi_tree_set_bps(struct v_world *world, struct v_poi_tree *tree, int i,
                  * is visited yet */
                 tree[i].poi->tree = tree;
                 tree[i].poi->tree_count = count;
-                v_set_bp(world, tree[i].poi, bpc);
-                bpc++;
+                v_set_bp(world, tree[i].poi, world->bpc);
+                world->bpc++;
                 return 1;
             }
             if (tree[i].flag[1]) {
@@ -655,8 +653,8 @@ v_poi_tree_set_bps(struct v_world *world, struct v_poi_tree *tree, int i,
                 i = tree[i].u.inext_taken;
                 tree[i].poi->tree = tree;
                 tree[i].poi->tree_count = count;
-                v_set_bp(world, tree[i].poi, bpc);
-                bpc++;
+                v_set_bp(world, tree[i].poi, world->bpc);
+                world->bpc++;
                 k++;
             } else if (tree[i].flag[2]) {
                 int m = bps;
@@ -714,14 +712,14 @@ v_poi_plan_bp(struct v_world *world, struct v_poi *poi, int bp_count)
     /* flag 1-2 represents branch left-right diff */
     V_VERBOSE("clear flags");
     v_poi_clear_flag0(tree, poi->tree_count);
-    bpc = 0;
+    world->bpc = 0;
     V_VERBOSE("set bps");
     v_poi_tree_set_bps(world, tree, i, poi->tree_count, bp_count);
-    world->current_valid_bps = bpc;
-    for (i = 0; i < bpc; i++) {
+    world->current_valid_bps = world->bpc;
+    for (i = 0; i < world->bpc; i++) {
         poi->plan.poi[i] = world->bp_to_poi[i];
     }
-    poi->plan.count = bpc;
+    poi->plan.count = world->bpc;
     poi->plan.valid = 1;
 }
 
@@ -772,13 +770,17 @@ v_update_pb_cache_poi(struct v_world *world, struct v_poi *poi,
     }
     mpage = h_p2mp(world, phys);
     if ((poi_dest = v_find_poi(mpage, dest)) == NULL) {
+        v_perf_inc(V_PERF_EVICT, 1);
         return;
     }
     for (i = 0; i < cache->total; i++) {
         if (cache->targets[i]->addr == dest)
             return;
     }
+    V_VERBOSE("Updated poi %x addr %x with cache %x", poi, poi->addr,
+        poi_dest->addr);
     if (cache->total >= V_POI_PB_CACHE_ENTIRES_TOTAL) {
+        v_perf_inc(V_PERF_FULL, 1);
         cache->targets[cache->replace] = poi_dest;
         cache->replace++;
         if (cache->replace >= V_POI_PB_CACHE_ENTIRES_TOTAL)
@@ -953,7 +955,8 @@ v_bt(struct v_world *world)
             V_ERR("Internal error...");
         }
     }
-    if (world->poi->type & V_INST_I) {
+    while (world->poi->next_inst != NULL && ((world->poi->type & V_INST_I)
+            || (world->poi->type & V_INST_UB))) {
         world->poi = world->poi->next_inst;
     }
     if (world->poi->type & V_INST_CB) {

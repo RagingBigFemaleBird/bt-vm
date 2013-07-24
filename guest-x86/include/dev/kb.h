@@ -20,6 +20,7 @@
 
 #define G_DEV_KB_BUFFER_SIZE 64
 #define G_DEV_KB_STAT_OUT_READY 1
+#define G_DEV_KB_CMD_CTR 0x20
 #define G_DEV_KB_CMD_RESET 0xae
 #define G_DEV_KB_CMD_LED 0xed
 #define G_DEV_KB_ACK 0xfa

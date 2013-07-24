@@ -42,6 +42,8 @@
 #include "vm/include/logging.h"
 #include "host/include/interrupt.h"
 
+//#define NO_VARIABLE_FD_DENSITY
+
 #define PROCFS_NAME "btc"
 
 #define BTC_IOC_MAGIC 'v'
@@ -336,7 +338,13 @@ btc_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
                 init = 0;
                 g_disk_length = len;
 #ifdef CONFIG_X86
-                g_dev_floppy_density = (g_disk_length - 1) / (512 * 2880) + 1;
+                g_dev_floppy_density =
+#ifdef NO_VARIABLE_FD_DENSITY
+                    1
+#else
+                    (g_disk_length - 1) / (512 * 2880) + 1
+#endif
+                    ;
 #endif
             }
             for (i = 0; i < V_PERF_COUNT; i++) {
@@ -380,7 +388,7 @@ btc_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 
     case BTC_RUN:
         btc_work_func(NULL);
-        ret = 1;
+        ret = !(stepping % 5000);
         break;
 
     case BTC_UMOUNT:
@@ -390,9 +398,13 @@ btc_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 #ifdef CONFIG_X86
         g_disk_data = NULL;
         g_disk_length = 0;
+#ifdef NO_VARIABLE_FD_DENSITY
+        g_dev_floppy_density = 1;
+#else
         g_dev_floppy_density = 1;
         g_dev_floppy_param_c = 254;
         g_dev_floppy_param_s = 90;
+#endif
         g_fdc_eject(w_list);
         len = 0;
         ret = 0;

@@ -206,6 +206,11 @@ g_kb_handle_io(struct v_world *world, unsigned int dir, unsigned int address,
             } else {
                 *data = G_DEV_KB_STAT_OUT_READY;
             }
+        } else if (dir == G_IO_OUT) {
+            if (*data == G_DEV_KB_CMD_CTR) {
+                kb_push_buffer(world, 0);
+            } else
+                goto io_not_handled;
         } else
             goto io_not_handled;
         break;

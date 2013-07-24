@@ -32,7 +32,7 @@
 void *
 h_valloc(unsigned long size)
 {
-    return kmalloc(size, GFP_KERNEL);
+    return kmalloc(size, GFP_ATOMIC);
 }
 
 void
@@ -64,7 +64,7 @@ h_palloc(unsigned int order)
     struct v_chunk *v;
     h_addr_t phys;
     unsigned int pr;
-    p = alloc_pages(GFP_KERNEL, order);
+    p = alloc_pages(GFP_ATOMIC, order);
     if (p == NULL) {
         V_ERR("Page allocation failure");
         return NULL;
@@ -89,7 +89,7 @@ h_palloc_zone(unsigned int order, unsigned int zone)
     if (zone >= V_MM_ALLOC_ZONE_ALL) {
         p = alloc_pages(GFP_ATOMIC, order);
     } else {
-        p = alloc_pages(GFP_KERNEL, order);
+        p = alloc_pages(GFP_ATOMIC, order);
     }
     if (p == NULL) {
         V_ERR("Page allocation failure");
@@ -693,4 +693,28 @@ h_monitor_setup_data_pages(struct v_world *world, h_addr_t sptbase)
                 V_PAGE_W | V_PAGE_VM);
         }
     }
+}
+
+void
+h_delete_trbase(struct v_world *world)
+{
+    void *htrv;
+    unsigned int i, j;
+    struct v_chunk v;
+    v.order = H_TRBASE_ORDER;
+    v.phys = world->htrbase;
+    for (i = 0; i < (1 << H_TRBASE_ORDER); i++) {
+
+        htrv = h_alloc_va(world->htrbase + i * H_PAGE_SIZE);
+        for (j = 0; j < H_PAGE_SIZE; j += 4) {
+            if ((*(unsigned int *) (htrv + j)) & 0x1) {
+                struct v_chunk v;
+                v.order = H_TRBASE_ORDER;
+                v.phys = *(unsigned int *) (htrv + j) & 0xfffff000;
+                h_pfree(&v);
+            }
+        }
+        h_free_va(world->htrbase + i * H_PAGE_SIZE);
+    }
+    h_pfree(&v);
 }

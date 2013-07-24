@@ -699,7 +699,6 @@ h_switcher(unsigned long trbase, struct v_world *w)
     inline void monitor(void) {
         /* important:
          * do not initialize any var declared here: no stack yet
-         * do not use 'break' anywhere, it breaks
          */
         struct v_world *mon_world;
         int dr;
@@ -710,9 +709,16 @@ h_switcher(unsigned long trbase, struct v_world *w)
         asm volatile ("mov %esp, %ebp");
         mon_world =
             (struct v_world *) ((unsigned int) (mon_world) & H_PFN_MASK);
+        mon_world->monitor_fault = 1;
         poi = (struct v_poi *) monitor_access(mon_world, mon_world->poi);
 //        monitor_log(mon_world, 't');
 //        monitor_log(mon_world, '0' + poi->type);
+        if (poi == NULL)
+            return;
+        if (poi->type & V_INST_F) {
+            mon_world->monitor_fault = 0;
+            return;
+        }
 
         asm volatile ("mov %%dr6, %0":"=r" (dr));
         process = 0;
@@ -737,13 +743,15 @@ h_switcher(unsigned long trbase, struct v_world *w)
 
             /* todo: assuming flat mem */
             for (i = 0; i < poi->pb_cache_poi.total; i++) {
-                temp =
-                    (struct v_poi *) monitor_access(mon_world,
-                    poi->pb_cache_poi.targets[i]);
+                temp2 = poi->pb_cache_poi.targets[i];
+                temp = (struct v_poi *) monitor_access(mon_world, temp2);
+                if (temp == NULL)
+                    return;
                 if (temp->addr == mon_world->hregs.gcpu.eip) {
-                    temp2 = NULL;
-                    if (temp != NULL && (temp->type & V_INST_I)) {
-                        while (temp != NULL && (temp->type & V_INST_I)) {
+                    if (temp != NULL && ((temp->type & V_INST_I)
+                            || (temp->type & V_INST_UB))) {
+                        while (temp != NULL && ((temp->type & V_INST_I)
+                                || (temp->type & V_INST_UB))) {
                             if (temp->next_inst == NULL) {
                                 temp = NULL;
                             } else {
@@ -756,31 +764,44 @@ h_switcher(unsigned long trbase, struct v_world *w)
                     }
                     if (temp != NULL) {
                         if (temp->type & V_INST_CB) {
+                            mon_world->pb_fail_reason = V_PERF_PB_FAIL_PLAN;
                             poi_new = temp2;
                             process = 2;
+                            break;
 //                            monitor_log(mon_world, 'C');
                         }
-                        if (temp->type & V_INST_PB) {
+                        if ((temp->type & V_INST_PB) || (temp->type & V_INST_U)
+                            || (temp->type & V_INST_F)) {
 //                            monitor_log(mon_world, 'P');
-                            if (mon_world->hregs.gcpu.eip != temp->addr) {
-                                poi_new = poi->pb_cache_poi.targets[i];
+                            if (((temp->type & V_INST_PB)
+                                    || (temp->type & V_INST_U))
+                                && mon_world->hregs.gcpu.eip == temp->addr) {
+                                poi_new = temp2;
                                 process = 2;
+                                break;
 //                                monitor_log(mon_world, '2');
                             } else {
                                 temp->expect = 1;
-                                mon_world->poi = poi->pb_cache_poi.targets[i];
-                                dr &= 0xffff0ff0;
-                                asm volatile ("mov %0, %%dr6"::"r" (dr));
+                                mon_world->poi = temp2;
                                 mon_world->hregs.gcpu.eflags &=
                                     (~(H_EFLAGS_RF | H_EFLAGS_TF));
                                 mon_world->hregs.gcpu.dr7 &= (0xff00);
                                 mon_world->hregs.gcpu.dr7 |= 0x703;
-                                mon_world->bp_to_poi[0] =
-                                    poi->pb_cache_poi.targets[i];
+                                mon_world->bp_to_poi[0] = temp2;
                                 mon_world->current_valid_bps = 1;
                                 mon_world->gregs.rf = 0;
-                                addr = temp->addr;
-                                mon_world->hregs.gcpu.dr0 = addr;
+                                mon_world->hregs.gcpu.dr0 = addr = temp->addr;
+                                mon_world->monitor_fault = 0;
+                                if ((temp->type & V_INST_F)
+                                    && mon_world->hregs.gcpu.eip == temp->addr) {
+                                    /*fake breaking on bp 0 */
+                                    dr &= 0xffff0ff0;
+                                    dr |= 1;
+                                    asm volatile ("mov %0, %%dr6"::"r" (dr));
+                                    return;
+                                }
+                                dr &= 0xffff0ff0;
+                                asm volatile ("mov %0, %%dr6"::"r" (dr));
                                 asm volatile ("mov %0, %%dr0"::"r" (addr));
                                 asm volatile ("mov %0, %%dr7"::
                                     "r" (mon_world->hregs.gcpu.dr7));
@@ -791,9 +812,14 @@ h_switcher(unsigned long trbase, struct v_world *w)
                                 asm volatile ("iret");
                             }
                         }
+                        //monitor_log(mon_world, temp->type + '0');
+                        mon_world->pb_fail_reason = V_PERF_PB_FAIL_OTHER;
                     }
+                    break;
                 }
             }
+            if (!process && !mon_world->pb_fail_reason)
+                mon_world->pb_fail_reason = V_PERF_PB_FAIL_CACHE;
         }
 #endif
         if (process) {
@@ -804,8 +830,10 @@ h_switcher(unsigned long trbase, struct v_world *w)
                 mon_world->hregs.gcpu.eflags |= (H_EFLAGS_TF | H_EFLAGS_RF);
                 mon_world->hregs.gcpu.dr7 &= (0xff00);
                 mon_world->gregs.rf = 1;
+                mon_world->monitor_fault = 0;
                 dr &= 0xffff0ff0;
                 asm volatile ("mov %0, %%dr6"::"r" (dr));
+                asm volatile ("mov %0, %%dr7"::"r" (mon_world->hregs.gcpu.dr7));
                 asm volatile ("pop %es");
                 asm volatile ("pop %ds");
                 asm volatile ("popa");
@@ -815,6 +843,7 @@ h_switcher(unsigned long trbase, struct v_world *w)
             if ((poi->type & V_INST_CB) && poi->plan.valid) {
                 poi->expect = 0;
                 mon_world->poi = poi_new;
+                mon_world->pb_fail_reason = 0;
                 dr &= 0xffff0ff0;
                 asm volatile ("mov %0, %%dr6"::"r" (dr));
                 mon_world->hregs.gcpu.eflags &= (~(H_EFLAGS_RF | H_EFLAGS_TF));
@@ -863,6 +892,7 @@ h_switcher(unsigned long trbase, struct v_world *w)
                     }
                 }
                 mon_world->hregs.gcpu.dr7 |= i;
+                mon_world->monitor_fault = 0;
                 asm volatile ("mov %0, %%dr7"::"r" (mon_world->hregs.gcpu.dr7));
                 asm volatile ("pop %es");
                 asm volatile ("pop %ds");
@@ -871,6 +901,7 @@ h_switcher(unsigned long trbase, struct v_world *w)
                 asm volatile ("iret");
             }
         }
+        mon_world->monitor_fault = 0;
     }
     h_addr_t tr = (h_addr_t) trbase;
     struct h_regs *h = &w->hregs;
@@ -1134,9 +1165,8 @@ h_switch_to(unsigned long trbase, struct v_world *w)
     w->last_tsc = tsc;
 
     h->gcpu.ds = h->gcpu.ds & 0xffff;
-    if ((h->gcpu.fs & 0xffff0000) != 0 || (h->gcpu.es & 0xffff0000) != 0
-        || (h->gcpu.gs & 0xffff0000) != 0) {
-        V_EVENT("Monitor fault");
+    if (w->monitor_fault) {
+        V_VERBOSE("Monitor fault");
     }
     if (w->monitor_buffer_start != w->monitor_buffer_end) {
         char buffer[MONITOR_BUFFER_MAX];
@@ -1149,6 +1179,12 @@ h_switch_to(unsigned long trbase, struct v_world *w)
         }
         buffer[cp] = 0;
         V_ERR("Monitor log: %s", buffer);
+    }
+    if (w->pb_fail_reason != 0) {
+        v_perf_inc(w->pb_fail_reason, 1);
+        V_VERBOSE("PB failure for %lx at %x reason %x", w->poi->addr,
+            h->gcpu.eip, w->pb_fail_reason);
+        w->pb_fail_reason = 0;
     }
     h->gcpu.es = h->gcpu.es & 0xffff;
     h->gcpu.fs = h->gcpu.fs & 0xffff;
@@ -1371,30 +1407,6 @@ h_gdt_load(struct v_world *world, unsigned int *seg, unsigned int selector,
     (*seg) = (selector & 0xffff) | ((replace_rpl) ? 0x3 : 0);
     return 0;
 
-}
-
-void
-h_delete_trbase(struct v_world *world)
-{
-    void *htrv;
-    unsigned int i, j;
-    struct v_chunk v;
-    v.order = H_TRBASE_ORDER;
-    v.phys = world->htrbase;
-    for (i = 0; i < (1 << H_TRBASE_ORDER); i++) {
-
-        htrv = h_alloc_va(world->htrbase + i * H_PAGE_SIZE);
-        for (j = 0; j < H_PAGE_SIZE; j += 4) {
-            if ((*(unsigned int *) (htrv + j)) & 0x1) {
-                struct v_chunk v;
-                v.order = 0;
-                v.phys = *(unsigned int *) (htrv + j) & 0xfffff000;
-                h_pfree(&v);
-            }
-        }
-        h_free_va(world->htrbase + i * H_PAGE_SIZE);
-    }
-    h_pfree(&v);
 }
 
 static void

@@ -164,6 +164,7 @@ h_world_init(struct v_world *world)
     world->hregs.gcpu.trsave.esp0 = (unsigned int) (&world->hregs.gcpu.cpuid0);
     world->hregs.gcpu.trsave.iomap = sizeof(struct h_tr_table) + 1;
     world->hregs.gcpu.dr7 = 0x700;
+    world->pb_fail_reason = 0;
 
     asm volatile ("movl $restoreCS, %0":"=r" (world->hregs.hcpu.eip));
     world->hregs.hcpu.switcher = h_switcher;

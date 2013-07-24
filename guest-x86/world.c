@@ -663,7 +663,9 @@ g_do_int(struct v_world *world, unsigned int param)
                     world->hregs.gcpu.eflags &= (~H_EFLAGS_CF);
                     err |= h_write_guest(world, addr, 0);
                     err |= h_write_guest(world, addr + 4, 0);
-                    err |= h_write_guest(world, addr + 8, G_CONFIG_MEM_PAGES << 12);
+                    err |=
+                        h_write_guest(world, addr + 8,
+                        G_CONFIG_MEM_PAGES << 12);
                     err |= h_write_guest(world, addr + 12, 0);
                     err |= h_write_guest(world, addr + 16, 0);
                     if (err) {

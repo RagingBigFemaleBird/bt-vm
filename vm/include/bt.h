@@ -62,7 +62,7 @@ struct v_poi_cached_tree_plan_container {
     void *exec_cache;
 };
 
-#define V_POI_PB_CACHE_ENTIRES_TOTAL 6
+#define V_POI_PB_CACHE_ENTIRES_TOTAL 18
 struct v_poi_pb_cache {
     unsigned int total;
     unsigned int replace;

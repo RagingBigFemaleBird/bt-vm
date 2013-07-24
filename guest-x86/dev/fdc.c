@@ -257,6 +257,10 @@ g_fdc_handle_io(struct v_world *world, unsigned int dir, unsigned int address,
                     V_LOG("FDC read");
                     fdc_states->out_expect_bytes = 8;
                     break;
+                case G_FDC_CMD_WRITE:
+                    V_LOG("FDC write");
+                    fdc_states->out_expect_bytes = 8;
+                    break;
                 case G_FDC_CMD_SEEK:
                     V_LOG("FDC seek");
                     fdc_states->out_expect_bytes = 2;
