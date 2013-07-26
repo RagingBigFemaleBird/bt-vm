@@ -183,7 +183,6 @@ procfile_write(struct file *file, const char *buffer, unsigned long count,
 void
 btc_work_func(struct work_struct *work)
 {
-    unsigned long flags;
     struct v_world *curr;
     curr = w_list;
     if (curr->status != VM_PAUSED) {

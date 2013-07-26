@@ -1418,50 +1418,6 @@ h_gdt_load(struct v_world *world, unsigned int *seg, unsigned int selector,
 
 }
 
-static void
-h_inv_pagetable(struct v_world *world, struct v_spt_info *spt,
-    g_addr_t virt, unsigned int level)
-{
-//careful, when inv virt, check against known bridge pages
-    void *htrv;
-    unsigned int i, j;
-    for (i = 0; i < (1 << H_TRBASE_ORDER); i++) {
-
-        htrv = h_alloc_va(spt->spt_paddr + i * H_PAGE_SIZE);
-        for (j = 0; j < H_PAGE_SIZE; j += 4) {
-            if ((*(unsigned int *) (htrv + j)) & 0x1) {
-                struct v_chunk v;
-                v.order = 0;
-                v.phys = *(unsigned int *) (htrv + j) & 0xfffff000;
-                h_pfree(&v);
-            }
-        }
-        h_clear_page(htrv);
-        h_free_va(spt->spt_paddr + i * H_PAGE_SIZE);
-    }
-    h_set_map(spt->spt_paddr, (h_addr_t) world,
-        h_v2p((h_addr_t) world), 1, V_PAGE_W | V_PAGE_VM);
-    V_LOG("world data at %llx, ",
-        (unsigned long long int) h_v2p((h_addr_t) world));
-    h_set_map(spt->spt_paddr, (h_addr_t) world->hregs.hcpu.switcher,
-        h_v2p((h_addr_t) world->hregs.hcpu.switcher), 1, V_PAGE_W | V_PAGE_VM);
-    V_LOG("neutral page at %llx\n",
-        (unsigned long long int) h_v2p((h_addr_t) world->hregs.hcpu.switcher));
-    h_set_map(spt->spt_paddr, (h_addr_t) world->hregs.gcpu.idt.base,
-        h_v2p(world->hregs.gcpu.idt.base), 1, V_PAGE_W | V_PAGE_VM);
-    V_LOG("idt at %llx\n",
-        (unsigned long long int) h_v2p(world->hregs.gcpu.idt.base));
-    h_set_map(spt->spt_paddr, (h_addr_t) world->hregs.gcpu.gdt.base,
-        h_v2p(world->hregs.gcpu.gdt.base), 1, V_PAGE_W | V_PAGE_VM);
-    V_LOG("gdt at %llx\n",
-        (unsigned long long int) h_v2p(world->hregs.gcpu.gdt.base));
-    for (i = 0; i < V_MM_MAX_POOL; i++) {
-        spt->mem_pool_mapped[i] = 0;
-    }
-    h_monitor_setup_data_pages(world, spt->spt_paddr);
-
-}
-
 void
 h_inv_spt(struct v_world *world, struct v_spt_info *spt)
 {

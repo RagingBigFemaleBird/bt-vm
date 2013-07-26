@@ -93,4 +93,7 @@ int h_write_guest(struct v_world *, h_addr_t, unsigned int);
 h_addr_t h_monitor_search_big_pages(struct v_world *, unsigned int, h_addr_t);
 void h_monitor_setup_data_pages(struct v_world *, h_addr_t);
 void h_virt_make_executable(h_addr_t, unsigned long);
+struct v_spt_info;
+void h_inv_pagetable(struct v_world *, struct v_spt_info *, g_addr_t,
+    unsigned int);
 #endif

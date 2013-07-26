@@ -148,12 +148,9 @@ v_page_map(struct v_world *world, struct v_page *page, h_addr_t address)
             p = &(page->ptp_list);
             new_item->vaddr = address;
             new_item->spt = spt;
-            new_item->next = NULL;
             new_item->gpt_level = 0;
-            while (*p != NULL) {
-                p = &((*p)->next);
-            }
-            (*p) = new_item;
+            new_item->next = page->ptp_list;
+            page->ptp_list = new_item;
         }
     }
 }
@@ -319,6 +316,9 @@ v_spt_get_by_gpt(struct v_world *w, g_addr_t gpt)
  * @in mpage machine page
  *
  * invalidates all registered mappings with mpage
+ * this implies two things:
+ * 1. any registered va->mpage mapping in any spt is no longer good
+ * 2. any spt where mpage was part of a page table is invalid
  */
 void
 v_spt_inv_page(struct v_world *world, struct v_page *mpage)
@@ -344,17 +344,13 @@ v_spt_inv_page(struct v_world *world, struct v_page *mpage)
                 check1 = check1->next;
             }
             if (!exist1) {
-                struct v_inv_entry **p = &(spt->inv_list);
                 struct v_inv_entry *new_item =
                     h_valloc(sizeof(struct v_inv_entry));
                 V_VERBOSE("registered at spt %lx", spt->spt_paddr);
                 new_item->type = 0;
                 new_item->page = mpage;
-                new_item->next = NULL;
-                while (*p != NULL) {
-                    p = &((*p)->next);
-                }
-                (*p) = new_item;
+                new_item->next = spt->inv_list;
+                spt->inv_list = new_item;
             }
         }
         spt = spt->next;

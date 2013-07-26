@@ -252,7 +252,7 @@ void
 h_clear_page(void *va)
 {
     va = (void *) (((unsigned int) va) & H_PFN_MASK);
-    h_memset((void *) va, 0, 4096);
+    h_memset((void *) va, 0, H_PAGE_SIZE);
 }
 
 #ifndef H_MM_USE_PAE
@@ -542,6 +542,7 @@ h_check_bridge_pages(struct v_world *w, h_addr_t virt)
         if (w->host_pools[i].mon_virt != 0 && w->host_pools[i].mon_virt <= virt
             && w->host_pools[i].mon_virt + w->host_pools[i].total_size >=
             virt) {
+            V_ERR("Monitor va conflict!");
             return 1;
         }
     }
@@ -706,15 +707,67 @@ h_delete_trbase(struct v_world *world)
     for (i = 0; i < (1 << H_TRBASE_ORDER); i++) {
 
         htrv = h_alloc_va(world->htrbase + i * H_PAGE_SIZE);
+#ifdef H_MM_USE_PAE
+#else
         for (j = 0; j < H_PAGE_SIZE; j += 4) {
-            if ((*(unsigned int *) (htrv + j)) & 0x1) {
+            unsigned int entry = *(unsigned int *) (htrv + j);
+            if ((entry & H_PAGE_P) && !(entry & H_PAGE_PS)) {
                 struct v_chunk v;
-                v.order = H_TRBASE_ORDER;
-                v.phys = *(unsigned int *) (htrv + j) & 0xfffff000;
+                v.order = 0;
+                v.phys = entry & H_PFN_MASK;
                 h_pfree(&v);
             }
         }
+#endif
         h_free_va(world->htrbase + i * H_PAGE_SIZE);
     }
     h_pfree(&v);
+}
+
+void
+h_inv_pagetable(struct v_world *world, struct v_spt_info *spt,
+    g_addr_t virt, unsigned int level)
+{
+//careful, when inv virt, check against known bridge pages
+    void *htrv;
+    unsigned int i, j;
+    for (i = 0; i < (1 << H_TRBASE_ORDER); i++) {
+
+        htrv = h_alloc_va(spt->spt_paddr + i * H_PAGE_SIZE);
+#ifdef H_MM_USE_PAE
+#else
+        for (j = 0; j < H_PAGE_SIZE; j += 4) {
+            unsigned int entry = *(unsigned int *) (htrv + j);
+            if ((entry & H_PAGE_P) && !(entry & H_PAGE_PS)) {
+                struct v_chunk v;
+                v.order = 0;
+                v.phys = entry & H_PFN_MASK;
+                h_pfree(&v);
+            }
+        }
+#endif
+        h_clear_page(htrv);
+        h_free_va(spt->spt_paddr + i * H_PAGE_SIZE);
+    }
+    h_set_map(spt->spt_paddr, (h_addr_t) world,
+        h_v2p((h_addr_t) world), 1, V_PAGE_W | V_PAGE_VM);
+    V_LOG("world data at %llx, ",
+        (unsigned long long int) h_v2p((h_addr_t) world));
+    h_set_map(spt->spt_paddr, (h_addr_t) world->hregs.hcpu.switcher,
+        h_v2p((h_addr_t) world->hregs.hcpu.switcher), 1, V_PAGE_W | V_PAGE_VM);
+    V_LOG("neutral page at %llx\n",
+        (unsigned long long int) h_v2p((h_addr_t) world->hregs.hcpu.switcher));
+    h_set_map(spt->spt_paddr, (h_addr_t) world->hregs.gcpu.idt.base,
+        h_v2p(world->hregs.gcpu.idt.base), 1, V_PAGE_W | V_PAGE_VM);
+    V_LOG("idt at %llx\n",
+        (unsigned long long int) h_v2p(world->hregs.gcpu.idt.base));
+    h_set_map(spt->spt_paddr, (h_addr_t) world->hregs.gcpu.gdt.base,
+        h_v2p(world->hregs.gcpu.gdt.base), 1, V_PAGE_W | V_PAGE_VM);
+    V_LOG("gdt at %llx\n",
+        (unsigned long long int) h_v2p(world->hregs.gcpu.gdt.base));
+    for (i = 0; i < V_MM_MAX_POOL; i++) {
+        spt->mem_pool_mapped[i] = 0;
+    }
+    h_monitor_setup_data_pages(world, spt->spt_paddr);
+
 }

@@ -153,6 +153,8 @@ g_v2p(struct v_world * world, g_addr_t virt, unsigned int do_not_fault)
     return ret;
 }
 
+#define PT0_FAKE_VIRT 1
+
 void
 g_pagetable_map(struct v_world *world, g_addr_t virt)
 {
@@ -190,7 +192,7 @@ g_pagetable_map(struct v_world *world, g_addr_t virt)
         exist = 0;
         while ((!exist) && (*p) != NULL) {
             if ((*p)->spt == spt && (*p)->gpt_level == 1
-                && (*p)->vaddr == (virt & H_PFN_MASK))
+                && (*p)->vaddr == PT0_FAKE_VIRT)
                 exist = 1;
             p = &((*p)->next);
         }
@@ -198,7 +200,7 @@ g_pagetable_map(struct v_world *world, g_addr_t virt)
             newp = h_valloc(sizeof(struct v_ptp_info));
             p = &(mpage->ptp_list);
 
-            newp->vaddr = (virt & H_PFN_MASK);
+            newp->vaddr = PT0_FAKE_VIRT;
             newp->spt = spt;
             newp->next = NULL;
             newp->gpt_level = 1;
