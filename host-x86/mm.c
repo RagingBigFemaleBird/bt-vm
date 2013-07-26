@@ -134,6 +134,13 @@ h_free_va(h_addr_t phys)
 }
 
 void
+h_free_va_mpage(struct v_page *mpage)
+{
+    mpage->has_virt = 0;
+    kunmap(phys_to_page(mpage->mfn << H_PAGE_SHIFT));
+}
+
+void
 h_set_p2m(struct v_world *world, g_addr_t pa, unsigned long pages, h_addr_t ma)
 {
     struct v_page *pg;
@@ -565,6 +572,7 @@ h_read_guest(struct v_world *world, h_addr_t addr, unsigned int *word)
         virt = v_page_make_present(mpage);
         virt = virt + (addr & 0xfff);
         (*word) = (*(unsigned int *) (virt));
+        h_free_va_mpage(mpage);
     } else {
         virt = v_page_make_present(mpage);
         virt = virt + (addr & 0xfff);
@@ -578,7 +586,7 @@ h_read_guest(struct v_world *world, h_addr_t addr, unsigned int *word)
         virt = v_page_make_present(mpage);
         h_memcpy((void *) (word) + 0xfff - (addr & 0xfff) + 1, virt,
             3 + (addr & 0xfff) - 0xfff);
-
+        h_free_va_mpage(mpage);
     }
     return 0;
 }
@@ -599,6 +607,7 @@ h_write_guest(struct v_world *world, h_addr_t addr, unsigned int word)
         virt = v_page_make_present(mpage);
         virt = virt + (addr & 0xfff);
         (*(unsigned int *) (virt)) = word;
+        h_free_va_mpage(mpage);
     } else {
         virt = v_page_make_present(mpage);
         virt = virt + (addr & 0xfff);
@@ -612,7 +621,7 @@ h_write_guest(struct v_world *world, h_addr_t addr, unsigned int word)
         virt = v_page_make_present(mpage);
         h_memcpy(virt, ((void *) (&word)) + 0xfff - (addr & 0xfff) + 1,
             3 + (addr & 0xfff) - 0xfff);
-
+        h_free_va_mpage(mpage);
     }
     return 0;
 }

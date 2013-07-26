@@ -17,6 +17,7 @@
  */
 #include "vm/include/world.h"
 #include "guest/include/mm.h"
+#include "guest/include/cpu.h"
 #include "host/include/mm.h"
 #include "vm/include/mm.h"
 #include "vm/include/logging.h"
@@ -184,7 +185,7 @@ v_pagefault(struct v_world *world, g_addr_t address, int reason)
         if (mpage->attr & V_PAGE_NOTPRESENT) {
             V_LOG("allocating new page\n");
             v_page_make_present(mpage);
-            h_free_va(mpage->mfn << H_PAGE_SHIFT);
+            h_free_va_mpage(mpage);
         }
         mpage->attr = mpage->attr & (~V_PAGE_ACCESS_MASK);
         mpage->attr |= (g_attr & V_PAGE_PRIV_MASK);

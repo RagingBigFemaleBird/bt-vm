@@ -65,6 +65,8 @@ void h_pfree(struct v_chunk *v);
 /* allocate/deallocate virtual page for the specific physical page */
 void *h_alloc_va(h_addr_t);
 void h_free_va(h_addr_t);
+struct v_page;
+void h_free_va_mpage(struct v_page *);
 
 /* temporaryly allocate virtual page. the first address may fail as soon as the second call is made */
 void *h_alloc_va_temp(h_addr_t);
