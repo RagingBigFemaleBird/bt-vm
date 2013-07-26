@@ -728,7 +728,8 @@ void
 h_inv_pagetable(struct v_world *world, struct v_spt_info *spt,
     g_addr_t virt, unsigned int level)
 {
-//careful, when inv virt, check against known bridge pages
+    //careful, when inv virt, check against known bridge pages
+    //TODO: implement this correctly for better efficiency
     void *htrv;
     unsigned int i, j;
     for (i = 0; i < (1 << H_TRBASE_ORDER); i++) {

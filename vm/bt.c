@@ -260,9 +260,6 @@ v_translate(struct v_world *world, unsigned long ip)
         if ((mpage->attr & V_PAGE_TYPE_MASK) == V_PAGE_EXD) {
             mpage->attr &= (~V_PAGE_TYPE_MASK);
             mpage->attr |= V_PAGE_STEP;
-            if (mpage->attr & V_PAGE_W) {
-                mpage->attr &= (~V_PAGE_W);
-            }
             v_spt_inv_page(world, mpage);
             h_new_trbase(world);
             V_LOG("Write protecting %lx to %x", ip, mpage->attr);
@@ -298,9 +295,6 @@ v_translate_cue(struct v_world *world, unsigned long ip)
         if ((mpage->attr & V_PAGE_TYPE_MASK) == V_PAGE_EXD) {
             mpage->attr &= (~V_PAGE_TYPE_MASK);
             mpage->attr |= V_PAGE_STEP;
-            if (mpage->attr & V_PAGE_W) {
-                mpage->attr &= (~V_PAGE_W);
-            }
             v_spt_inv_page(world, mpage);
             h_new_trbase(world);
             V_LOG("Write protecting %lx to %x", ip, mpage->attr);

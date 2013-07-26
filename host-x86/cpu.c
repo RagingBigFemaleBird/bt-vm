@@ -2211,8 +2211,12 @@ h_gpfault(struct v_world *world)
                 h_inject_int(world, 0x0d);
                 break;
             }
+            //TODO: fix this hack
+            h_new_trbase(world);
+/*
             h_inv_pagetable(world,
                 v_spt_get_by_spt(world, world->htrbase), 0, 1);
+*/
             world->hregs.gcpu.eip += 8;
             break;
         } else if ((unsigned int) (*(unsigned int *) (inst)) == 0x38010f26) {
@@ -2223,8 +2227,12 @@ h_gpfault(struct v_world *world)
                 h_inject_int(world, 0x0d);
                 break;
             }
+            //TODO: fix this hack
+            h_new_trbase(world);
+/*
             h_inv_pagetable(world,
                 v_spt_get_by_spt(world, world->htrbase), 0, 1);
+*/
             world->hregs.gcpu.eip += 4;
             break;
         }

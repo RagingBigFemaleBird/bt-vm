@@ -179,9 +179,6 @@ g_pagetable_map(struct v_world *world, g_addr_t virt)
         if ((mpage->attr & V_PAGE_TYPE_MASK) != V_PAGE_PAGETABLE) {
             mpage->attr &= (~V_PAGE_TYPE_MASK);
             mpage->attr |= V_PAGE_PAGETABLE;
-            if (mpage->attr & V_PAGE_W) {
-                mpage->attr &= (~V_PAGE_W);
-            }
             v_spt_inv_page(world, mpage);
             h_new_trbase(world);
             V_LOG("Write protecting %x to %x", (unsigned int) mpage->mfn,
@@ -225,9 +222,6 @@ g_pagetable_map(struct v_world *world, g_addr_t virt)
         if ((mpage->attr & V_PAGE_TYPE_MASK) != V_PAGE_PAGETABLE) {
             mpage->attr &= (~V_PAGE_TYPE_MASK);
             mpage->attr |= V_PAGE_PAGETABLE;
-            if (mpage->attr & V_PAGE_W) {
-                mpage->attr &= (~V_PAGE_W);
-            }
             v_spt_inv_page(world, mpage);
             h_new_trbase(world);
             V_LOG("Write protecting %x to %x", (unsigned int) mpage->mfn,
