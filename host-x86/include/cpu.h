@@ -149,7 +149,7 @@ struct h_cpu {
     unsigned int dr2;
     unsigned int dr3;
     unsigned int dr7;
-    void (*switcher) (unsigned long trbase, struct v_world * w);
+    void (*switcher) (struct v_world * w);
     unsigned int page_fault_addr;
     unsigned char fpu_save[512] __attribute__ ((aligned (0x10)));
 
@@ -159,7 +159,7 @@ int h_cpu_init(void);
 #define host_processor_id() smp_processor_id()
 struct v_world;
 /*world switch function */
-void h_switcher(unsigned long, struct v_world *);
+void h_switcher(struct v_world *);
 int h_switch_to(unsigned long, struct v_world *);
 void h_cpu_save(struct v_world *);
 void h_delete_trbase(struct v_world *);

@@ -54,13 +54,14 @@ unsigned int flags;
 void
 h_int_prepare(void)
 {
-    h_8259_m1 = h_in_port(H_PORT_8259A_MASK1);
+/*    h_8259_m1 = h_in_port(H_PORT_8259A_MASK1);
     h_8259_m2 = h_in_port(H_PORT_8259A_MASK2);
     h_out_port(H_PORT_8259A_MASK1, 0x00);
     h_out_port(H_PORT_8259A_MASK2, 0x00);
     asm volatile ("pushf");
     asm volatile ("pop %0":"=r" (flags));
     asm volatile ("cli");
+*/
     //      h_apic_timer = *(volatile unsigned int*)(0xffffb390);
     //      time_slice = 0x400;
     //      *(volatile unsigned int*)(0xffffb380) = 256;
@@ -70,6 +71,7 @@ h_int_prepare(void)
 void
 h_int_restore(void)
 {
+/*
     h_out_port(H_PORT_8259A_MASK1, h_8259_m1);
     h_out_port(H_PORT_8259A_MASK2, h_8259_m2);
     //      if (h_apic_timer !=0) *(volatile unsigned int*)(0xffffb380) = h_apic_timer;
@@ -77,5 +79,6 @@ h_int_restore(void)
     //      *(volatile unsigned int*)(0xffffb0b0) = 0;
     asm volatile ("push %0"::"r" (flags));
     asm volatile ("popf");
+*/
 //    *(volatile unsigned int *) (0xffffb360) &= 0xfffeffff;
 }

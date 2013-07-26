@@ -22,7 +22,6 @@
 #include "host/include/cpu.h"
 
 extern void trap_start(void);
-extern void h_switcher(unsigned long trbase, struct v_world *w);
 
 static void
 h_monitor_fault_check_fixup(struct v_world *world)

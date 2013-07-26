@@ -47,7 +47,6 @@ void bt_cache_start(void);
 void sensitive_instruction_cache(void);
 static int sensitive_instruction_cache_offset;
 #endif
-void h_switcher(unsigned long trbase, struct v_world *w);
 
 int
 h_cpu_init(void)
@@ -674,7 +673,7 @@ h_gp_fault_quickpath_postprocessing2(struct v_world *world)
 
 __attribute__ ((aligned (0x1000)))
 void
-h_switcher(unsigned long trbase, struct v_world *w)
+h_switcher(struct v_world *w)
 {
     void monitor_log(struct v_world *mon_world, char c) {
         mon_world->monitor_buffer[mon_world->monitor_buffer_end] = c;
@@ -903,9 +902,8 @@ h_switcher(unsigned long trbase, struct v_world *w)
         }
         mon_world->monitor_fault = 0;
     }
-    h_addr_t tr = (h_addr_t) trbase;
+    h_addr_t tr = w->htrbase;
     struct h_regs *h = &w->hregs;
-    asm volatile ("cli");
     if (w->fpu_used && !(w->gregs.cr0 & H_CR0_TS)) {
         asm volatile ("movl %0, %%cr0"::"r" ((h->
                     hcpu.cr0 & (~H_CR0_TS)) & (~H_CR0_MP)));
@@ -1155,8 +1153,18 @@ h_switch_to(unsigned long trbase, struct v_world *w)
 
     V_LOG("Using switcher %p", h->hcpu.switcher);
 
+    asm volatile ("pushf");
+    asm volatile ("cli");
+    //we do not want to be rescheduled starting from here
+    //must have NO syscalls or linux function calls
+    //while interrupt is disabled
     w->last_tsc = h_perf_tsc_read();
-    h->hcpu.switcher(trbase, w);
+    if (!(w->cpu_init_mask & (1 << host_processor_id()))) {
+        //again check, if we are not fit to run on this processor
+        //return
+        return 0;
+    }
+    h->hcpu.switcher(w);
 
     asm volatile ("movl %0, %%dr7"::"r" (h->hcpu.dr7));
     asm volatile ("movl %0, %%cr0"::"r" (h->hcpu.cr0));
@@ -1165,6 +1173,10 @@ h_switch_to(unsigned long trbase, struct v_world *w)
     w->last_tsc = tsc;
 
     h->gcpu.ds = h->gcpu.ds & 0xffff;
+    h->gcpu.es = h->gcpu.es & 0xffff;
+    h->gcpu.fs = h->gcpu.fs & 0xffff;
+    h->gcpu.gs = h->gcpu.gs & 0xffff;
+    asm volatile ("popf");
     if (w->monitor_fault) {
         V_VERBOSE("Monitor fault");
     }
@@ -1186,9 +1198,6 @@ h_switch_to(unsigned long trbase, struct v_world *w)
             h->gcpu.eip, w->pb_fail_reason);
         w->pb_fail_reason = 0;
     }
-    h->gcpu.es = h->gcpu.es & 0xffff;
-    h->gcpu.fs = h->gcpu.fs & 0xffff;
-    h->gcpu.gs = h->gcpu.gs & 0xffff;
 
     h_perf_tsc_end(H_PERF_TSC_GUEST, 0);
     h_perf_tsc_begin(0);
