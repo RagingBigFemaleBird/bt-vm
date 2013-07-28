@@ -140,6 +140,7 @@ g_world_init(struct v_world *w, unsigned long pages)
     w->gregs.es = w->gregs.estrue = 0;
     w->gregs.fs = w->gregs.fstrue = 0;
     w->gregs.gs = w->gregs.gstrue = 0;
+    w->gregs.gdt_protected = 0;
 
     v_page_set_io(w, 0x7c00, g_init_boot_sector, 0);
 
@@ -240,7 +241,7 @@ g_do_io(struct v_world *world, unsigned int dir, unsigned int address,
                     world->gregs.dev.cmos.latch += (*(unsigned char *) param);
                 }
                 world->gregs.dev.cmos.ff ^= 1;
-                V_ALERT("LATCH set %d(%x)",
+                V_LOG("LATCH set %d(%x)",
                     world->gregs.dev.cmos.latch, world->gregs.dev.cmos.latch);
             } else
                 goto io_not_handled;
@@ -253,7 +254,7 @@ g_do_io(struct v_world *world, unsigned int dir, unsigned int address,
                         world->gregs.dev.cmos.latch & 0xff;
                 }
                 world->gregs.dev.cmos.ff ^= 1;
-                V_ALERT("LATCH read %d(%x)",
+                V_LOG("LATCH read %d(%x)",
                     world->gregs.dev.cmos.latch, world->gregs.dev.cmos.latch);
             } else
                 goto io_not_handled;

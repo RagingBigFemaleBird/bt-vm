@@ -1262,6 +1262,8 @@ h_switch_to(unsigned long trbase, struct v_world *w)
                 ((fault & V_MM_FAULT_NP) ? 0 : 1) | ((fault & V_MM_FAULT_W) ? 2
                 : 0) | ((w->gregs.ring == 0) ? 0 : 4);
             w->gregs.cr2 = h->gcpu.page_fault_addr;
+            V_ALERT("Page fault injection at %x, ip %x",
+                h->gcpu.page_fault_addr, w->hregs.gcpu.eip);
             h_inject_int(w, 0x0e);
         }
         h_perf_tsc_end(H_PERF_TSC_PF, 0);
@@ -1328,6 +1330,25 @@ h_switch_to(unsigned long trbase, struct v_world *w)
     return 0;
 }
 
+static void
+fix_gdt(struct v_world *world)
+{
+    //todo: we are only fixing for TLS where GS = 0x30
+    // if this is not Linux, we require a thorough check
+    unsigned int s0, s1, g0, g1;
+    if (world->gregs.mode != G_MODE_PG)
+        return;
+    if (world->gregs.gdt.limit <= 0x38)
+        return;
+    s0 = *(unsigned int *) (world->hregs.gcpu.gdt.base + 0x30);
+    s1 = *(unsigned int *) (world->hregs.gcpu.gdt.base + 0x34);
+    h_read_guest(world, world->gregs.gdt.base + 0x30, &g0);
+    h_read_guest(world, world->gregs.gdt.base + 0x34, &g1);
+    *(unsigned int *) (world->hregs.gcpu.gdt.base + 0x30) = g0;
+    *(unsigned int *) (world->hregs.gcpu.gdt.base + 0x34) = g1;
+}
+
+
 static int
 h_gdt_load(struct v_world *world, unsigned int *seg, unsigned int selector,
     int ex, unsigned int *seg_true, int replace_rpl)
@@ -1371,7 +1392,7 @@ h_gdt_load(struct v_world *world, unsigned int *seg, unsigned int selector,
     host += 4;
     (*(seg_true + 1)) = word2;
     *(unsigned int *) (host) = word2 & 0xffff90ff;      //no type, no DPL
-    (*(seg_true + 2)) = selector;
+    (*(seg_true + 2)) = sel;
     if ((!ex) && (((word2 & 0x6000) >> 13) < world->gregs.ring)) {
         //fault, comforming not checked;
         V_ERR("Guest GP Fault during selector load\n");
@@ -2156,6 +2177,31 @@ h_fake_pe(struct v_world *world)
 #ifdef DEBUG_CODECONTROL
 int last_is_cli = 0;
 #endif
+
+static int
+h_unprotect_gdt(struct v_world *world, g_addr_t address)
+{
+    g_addr_t pa = g_v2p(world, world->gregs.gdt.base, 0);
+    world->gregs.gdt_protected = 0;
+    v_page_unset_io(world, pa);
+    V_EVENT("GDT Broken!");
+    return 0;
+}
+
+static void
+h_protect_gdt(struct v_world *world)
+{
+    g_addr_t pa;
+    if (world->gregs.mode == G_MODE_REAL)
+        return;
+    if (!world->gregs.gdt_protected) {
+        pa = g_v2p(world, world->gregs.gdt.base, 0);
+        world->gregs.gdt_protected = 1;
+        v_page_set_io(world, pa, h_unprotect_gdt, 0);
+        fix_gdt(world);
+    }
+}
+
 
 void
 h_gpfault(struct v_world *world)
@@ -3302,6 +3348,7 @@ h_gpfault(struct v_world *world)
         break;
     case 0xcf:
         V_ALERT("IRET:");
+        h_protect_gdt(world);
         h_do_return(world, 0, 1);
         break;
     case 0x64:

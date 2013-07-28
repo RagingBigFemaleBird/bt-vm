@@ -153,6 +153,7 @@ struct g_regs {
     unsigned int zombie_ss;     //saves v86 ss
     unsigned int zombie_jumped;
     unsigned int fast_iret_possible;
+    unsigned int gdt_protected;
     struct g_devices dev;
 } __attribute__ ((__packed__));
 

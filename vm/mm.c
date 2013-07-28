@@ -94,9 +94,10 @@ v_validate_guest_virt(struct v_world *world, g_addr_t addr)
  */
 void
 v_page_set_io(struct v_world *world, g_addr_t phys,
-    int (*handler) (struct v_world *, g_addr_t), unsigned int delay)
+    int (*handler) (struct v_world *, g_addr_t), int delay)
 {
     struct v_page *mpage = h_p2mp(world, phys);
+    int protect_required = 0;
     if (mpage == NULL) {
         V_ERR("page_set_io: unknown phys address %lx", (unsigned long) phys);
         return;
@@ -110,8 +111,14 @@ v_page_set_io(struct v_world *world, g_addr_t phys,
     }
     mpage->io_page_info->handler = handler;
     mpage->io_page_info->delay = delay;
+    if ((mpage->attr & (~V_PAGE_TYPE_MASK)) != V_PAGE_IO) {
+        protect_required = 1;
+    }
     mpage->attr &= (~V_PAGE_TYPE_MASK);
     mpage->attr |= V_PAGE_IO;
+    if (delay < 0 && protect_required) {
+        v_spt_inv_page(world, mpage);
+    }
 }
 
 void

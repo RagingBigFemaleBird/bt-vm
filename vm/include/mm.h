@@ -130,7 +130,7 @@ struct v_ptp_info {
 int v_pagefault(struct v_world *, g_addr_t, int);
 void *v_page_make_present(struct v_page *);
 void v_page_set_io(struct v_world *, g_addr_t,
-    int (*handler) (struct v_world *, g_addr_t), unsigned int);
+    int (*handler) (struct v_world *, g_addr_t), int);
 void v_page_unset_io(struct v_world *, g_addr_t);
 void v_spt_add(struct v_world *, h_addr_t, g_addr_t);
 struct v_spt_info *v_spt_get_by_spt(struct v_world *, h_addr_t);
