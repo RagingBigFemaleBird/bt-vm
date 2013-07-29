@@ -160,6 +160,13 @@ do_keys(void)
     }
 }
 
+void 
+clean_exit_on_sig(int sig_num)
+{
+    echo();
+    exit(1);
+}
+
 int
 main(int argc, char **argv)
 {
@@ -172,6 +179,13 @@ main(int argc, char **argv)
             argv[0], argv[0]);
         exit(1);
     }
+    signal(SIGINT , clean_exit_on_sig);
+    signal(SIGABRT , clean_exit_on_sig);
+    signal(SIGILL , clean_exit_on_sig);
+    signal(SIGFPE , clean_exit_on_sig);
+    signal(SIGSEGV, clean_exit_on_sig);
+    signal(SIGTERM , clean_exit_on_sig);
+
     noecho();
     cbreak();
     timeout(0);
