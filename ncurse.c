@@ -164,6 +164,7 @@ void
 clean_exit_on_sig(int sig_num)
 {
     echo();
+    endwin();
     exit(1);
 }
 
@@ -179,6 +180,7 @@ main(int argc, char **argv)
             argv[0], argv[0]);
         exit(1);
     }
+    initscr();                  /* start the curses mode */
     signal(SIGINT , clean_exit_on_sig);
     signal(SIGABRT , clean_exit_on_sig);
     signal(SIGILL , clean_exit_on_sig);
@@ -214,7 +216,6 @@ main(int argc, char **argv)
 
     fprintf(stderr, "mapped \"%s\" from %lu (0x%08lx) to %lu (0x%08lx)\n",
         fname, offset, offset, offset + len, offset + len);
-    initscr();                  /* start the curses mode */
     getmaxyx(stdscr, row, col); /* get the number of rows and columns */
 
     do_keys();
