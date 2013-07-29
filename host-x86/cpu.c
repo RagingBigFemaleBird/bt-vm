@@ -2197,7 +2197,7 @@ h_protect_gdt(struct v_world *world)
     if (!world->gregs.gdt_protected) {
         pa = g_v2p(world, world->gregs.gdt.base, 0);
         world->gregs.gdt_protected = 1;
-        v_page_set_io(world, pa, h_unprotect_gdt, 0);
+        v_page_set_io(world, pa, h_unprotect_gdt, -1);
         fix_gdt(world);
     }
 }
@@ -3106,6 +3106,44 @@ h_gpfault(struct v_world *world)
                 V_LOG("guest gp fault");
             }
             world->hregs.gcpu.eip += 2;
+            break;
+        }
+        if (((unsigned int) (*(inst + 1)) <= 0x67)
+            && ((unsigned int) (*(inst + 1)) >= 0x60)) {
+            int reg = (unsigned int) (*(inst + 1)) & 0xf;
+            unsigned int *target = &world->hregs.gcpu.eax;
+            char offset = *(char *) (inst + 2);
+            unsigned int mem, content = 0;
+            V_LOG("Load FS [reg%x]off8(%d):", reg, (int) offset);
+            if (reg == 4)
+                V_ERR("SIB byte not handled");
+            mem = *(target - reg);
+            mem += (int) (offset);
+            if (h_read_guest(world, mem, &content) || h_gdt_load
+                (world, &world->hregs.gcpu.fs, content, 0,
+                    &world->gregs.fs, 0)) {
+                V_LOG("guest gp fault");
+            }
+            world->hregs.gcpu.eip += 3;
+            break;
+        }
+        if (((unsigned int) (*(inst + 1)) <= 0x6f)
+            && ((unsigned int) (*(inst + 1)) >= 0x68)) {
+            int reg = (unsigned int) (*(inst + 1)) & 0xf;
+            unsigned int *target = &world->hregs.gcpu.eax;
+            char offset = *(char *) (inst + 2);
+            unsigned int mem, content = 0;
+            V_LOG("Load GS [reg%x]off8(%d):", reg, (int) offset);
+            if (reg == 4)
+                V_ERR("SIB byte not handled");
+            mem = *(target - (reg - 8));
+            mem += (int) (offset);
+            if (h_read_guest(world, mem, &content) || h_gdt_load
+                (world, &world->hregs.gcpu.gs, content, 0,
+                    &world->gregs.gs, 0)) {
+                V_LOG("guest gp fault");
+            }
+            world->hregs.gcpu.eip += 3;
             break;
         }
         if (((unsigned int) (*(inst + 1)) <= 0xef)

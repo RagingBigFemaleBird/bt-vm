@@ -110,7 +110,7 @@ v_page_set_io(struct v_world *world, g_addr_t phys,
         return;
     }
     mpage->io_page_info->handler = handler;
-    mpage->io_page_info->delay = delay;
+    mpage->io_page_info->delay = delay < 0 ? 0 : delay;
     if ((mpage->attr & (~V_PAGE_TYPE_MASK)) != V_PAGE_IO) {
         protect_required = 1;
     }

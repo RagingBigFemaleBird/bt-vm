@@ -99,9 +99,12 @@ struct v_poi {
     int cache_threshold;
     struct v_poi_pb_cache pb_cache;
 #endif
+    union {
 #ifdef V_POI_PB_CACHED_POI
-    struct v_poi_pb_cache_poi pb_cache_poi;
+        struct v_poi_pb_cache_poi pb_cache_poi;
 #endif
+        struct v_poi *f_cache_poi;
+    };
 };
 
 struct v_ipoi {

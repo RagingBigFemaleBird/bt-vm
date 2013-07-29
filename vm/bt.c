@@ -865,6 +865,17 @@ v_do_bp(struct v_world *world, unsigned long addr, unsigned int is_step)
         h_do_fail_inst(world, ip);
         v_perf_inc(V_PERF_BT_F, 1);
         h_perf_tsc_end(H_PERF_TSC_MINUS_FI, 1);
+        if (world->poi != NULL && world->poi->f_cache_poi == NULL) {
+            ip = g_get_ip(world);
+            phys = g_v2p(world, ip, 1);
+            if (phys < world->pa_top) {
+                mpage = h_p2mp(world, phys);
+                if (mpage != NULL) {
+                    world->poi->f_cache_poi =
+                        v_find_poi(mpage, g_get_ip(world));
+                }
+            }
+        }
         world->poi = NULL;
     } else if (((world->poi->type & V_INST_U)
             || (world->poi->type & V_INST_PB))
