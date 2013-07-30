@@ -194,6 +194,19 @@ h_cpu_init(void)
 }
 
 void
+h_save_fpu(struct v_world *w)
+{
+    w->fpu_used = 1;
+}
+
+void
+h_restore_fpu(struct v_world *w)
+{
+    if (w->fpu_used) {
+    }
+}
+
+void
 h_cpu_save(struct v_world *w)
 {
     struct h_regs *h = &w->hregs;

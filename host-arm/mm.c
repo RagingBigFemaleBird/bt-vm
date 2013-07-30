@@ -78,6 +78,32 @@ h_palloc(unsigned int order)
     return v;
 }
 
+struct v_chunk *
+h_palloc_zone(unsigned int order, unsigned int zone)
+{
+    struct page *p;
+    struct v_chunk *v;
+    h_addr_t phys;
+    unsigned int pr;
+    if (zone >= V_MM_ALLOC_ZONE_ALL) {
+        p = alloc_pages(GFP_ATOMIC, order);
+    } else {
+        p = alloc_pages(GFP_ATOMIC, order);
+    }
+    if (p == NULL) {
+        V_ERR("Page allocation failure");
+        return NULL;
+    }
+    v = h_valloc(sizeof(struct v_chunk));
+    v->h.p = p;
+    v->phys = page_to_phys(p);
+    v->order = order;
+    for (pr = (1 << order), phys = v->phys; pr > 0; phys += 0x1000, pr--) {
+        h_pin(phys);
+    }
+    return v;
+}
+
 void
 h_pfree(struct v_chunk *v)
 {
@@ -108,6 +134,13 @@ h_free_va_virt(g_addr_t virt)
 {
     V_VERBOSE("deallocv for %x", virt_to_phys(virt));
     kunmap(phys_to_page(virt_to_phys((void *) (virt))));
+}
+
+void
+h_free_va_mpage(struct v_page *mpage)
+{
+    mpage->has_virt = 0;
+    kunmap(phys_to_page(mpage->mfn << H_PAGE_SHIFT));
 }
 
 void

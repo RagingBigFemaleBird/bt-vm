@@ -115,4 +115,7 @@ void h_cpu_save(struct v_world *);
 int h_access_guest(struct v_world *, unsigned int, unsigned int *);
 
 void h_do_fail_inst(struct v_world *, unsigned long);
+void h_save_fpu(struct v_world *);
+void h_restore_fpu(struct v_world *);
+
 #endif

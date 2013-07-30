@@ -44,6 +44,8 @@ struct h_chunk {
     struct page *p;
 };
 
+struct v_page;
+
 #define h_memcpy(dst, src, size) memcpy((dst), (src), (size))
 #define h_memset(dst, src, size) memset((dst), (src), (size))
 
@@ -55,12 +57,14 @@ void h_vfree(void *addr);
 
 /* host raw memory page allocator, returns machine address, NULL if failed */
 struct v_chunk *h_palloc(unsigned int order);
+struct v_chunk *h_palloc_zone(unsigned int, unsigned int);
 void h_pfree(struct v_chunk *v);
 
 /* allocate/deallocate virtual page for the specific physical page */
 void *h_alloc_va(unsigned int phys);
 void h_free_va(unsigned int phys);
 void h_free_va_virt(unsigned int virt);
+void h_free_va_mpage(struct v_page *);
 
 /* temporaryly allocate virtual page. the first address may fail as soon as the second call is made */
 void *h_alloc_va_temp(unsigned int phys);
