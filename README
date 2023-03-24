@@ -1,6 +1,8 @@
     Virtual Machine using Breakpoint Tracing
     Copyright (C) 2012 Bi Wu
 
+Refer to my dissertation for details
+
 Instructions:
 To compile,
 
@@ -11,7 +13,7 @@ To compile,
 To run,
 
 	insmod btc.ko
-	cat your_image_file > /proc/btc
+	cat floppy-linux.img > /proc/btc
         mknod /dev/btc0 c your_device_number 0
 	./vm-term /dev/btc0 0 32768
 
@@ -24,4 +26,10 @@ F5 pause VM and bring up menu, in menu:
 HOME key scrolls up
 END key scrolls down
 other keys will be sent to VM, currently only accept a-z, 1-0, enter, space, backspace
+
+
+Common problems:
+
+vmalloc is not big enough: increase vmalloc size via boot parameter
+random crashes: SMP need fixing but I was too lazy to do it
 
